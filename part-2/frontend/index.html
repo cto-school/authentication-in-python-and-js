@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Part 2: User Registration</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <div class="container py-5">
+        <!-- Page Title -->
+        <h1 class="text-center mb-4">Part 2: User Registration</h1>
+        <p class="text-center text-muted mb-5">Create a new user account</p>
+
+        <div class="row justify-content-center">
+            <!-- ================================== -->
+            <!-- Registration Form -->
+            <!-- ================================== -->
+            <div class="col-md-5 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Register</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Email Input -->
+                        <div class="mb-3">
+                            <label class="form-label">Email:</label>
+                            <input
+                                type="email"
+                                id="email"
+                                class="form-control"
+                                placeholder="Enter your email"
+                            >
+                        </div>
+
+                        <!-- Password Input -->
+                        <div class="mb-3">
+                            <label class="form-label">Password:</label>
+                            <input
+                                type="password"
+                                id="password"
+                                class="form-control"
+                                placeholder="Enter your password"
+                            >
+                        </div>
+
+                        <!-- Register Button -->
+                        <button onclick="register()" class="btn btn-primary w-100">
+                            Register
+                        </button>
+
+                        <!-- Result Display -->
+                        <div id="result" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================== -->
+            <!-- Users List (For Testing) -->
+            <!-- ================================== -->
+            <div class="col-md-5 mb-4">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">Registered Users</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Refresh Button -->
+                        <button onclick="getUsers()" class="btn btn-secondary w-100 mb-3">
+                            Refresh User List
+                        </button>
+
+                        <!-- Users List Display -->
+                        <div id="usersList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================== -->
+        <!-- Info Card -->
+        <!-- ================================== -->
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">How It Works</h5>
+                    </div>
+                    <div class="card-body">
+                        <ol>
+                            <li>You enter email and password</li>
+                            <li>Frontend sends data to <code>/register</code> API</li>
+                            <li>Backend hashes the password (never stores plain password!)</li>
+                            <li>Backend saves user to database</li>
+                            <li>Backend returns success or error message</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================== -->
+    <!-- JavaScript Code -->
+    <!-- ================================== -->
+    <script>
+        // Backend API URL
+        const API_URL = 'http://localhost:5002';
+
+        // -----------------------------------------
+        // Function: Register User
+        // -----------------------------------------
+        async function register() {
+            // Step 1: Get values from input fields
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            // Step 2: Basic validation
+            if (!email) {
+                showResult('Please enter email', 'danger');
+                return;
+            }
+
+            if (!password) {
+                showResult('Please enter password', 'danger');
+                return;
+            }
+
+            // Step 3: Call the register API
+            try {
+                const response = await fetch(API_URL + '/register', {
+                    method: 'POST',  // POST method for creating data
+                    headers: {
+                        'Content-Type': 'application/json'  // We're sending JSON
+                    },
+                    body: JSON.stringify({  // Convert object to JSON string
+                        email: email,
+                        password: password
+                    })
+                });
+
+                // Step 4: Get response data
+                const data = await response.json();
+
+                // Step 5: Check if successful
+                if (response.ok) {
+                    // Success - show green message
+                    showResult(data.message, 'success');
+
+                    // Clear input fields
+                    document.getElementById('email').value = '';
+                    document.getElementById('password').value = '';
+
+                    // Refresh users list
+                    getUsers();
+                } else {
+                    // Error - show red message
+                    showResult(data.message, 'danger');
+                }
+
+            } catch (error) {
+                // Network error or server not running
+                showResult('Error: ' + error.message, 'danger');
+            }
+        }
+
+        // -----------------------------------------
+        // Function: Get All Users
+        // -----------------------------------------
+        async function getUsers() {
+            try {
+                // Call the API
+                const response = await fetch(API_URL + '/users');
+                const data = await response.json();
+
+                // Build HTML for users list
+                let html = '';
+
+                if (data.users.length === 0) {
+                    html = '<p class="text-muted">No users registered yet</p>';
+                } else {
+                    // Create a list of users
+                    html = '<ul class="list-group">';
+                    for (const user of data.users) {
+                        html += `
+                            <li class="list-group-item">
+                                <strong>${user.email}</strong>
+                                <br>
+                                <small class="text-muted">ID: ${user.id} | Registered: ${user.created_at}</small>
+                            </li>
+                        `;
+                    }
+                    html += '</ul>';
+                    html += `<p class="mt-2 text-muted">Total: ${data.total} user(s)</p>`;
+                }
+
+                // Display the list
+                document.getElementById('usersList').innerHTML = html;
+
+            } catch (error) {
+                document.getElementById('usersList').innerHTML = `
+                    <p class="text-danger">Error loading users: ${error.message}</p>
+                `;
+            }
+        }
+
+        // -----------------------------------------
+        // Helper Function: Show Result Message
+        // -----------------------------------------
+        function showResult(message, type) {
+            // type can be: 'success', 'danger', 'warning', 'info'
+            document.getElementById('result').innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+        }
+
+        // -----------------------------------------
+        // Load users when page loads
+        // -----------------------------------------
+        getUsers();
+    </script>
+
+</body>
+</html>

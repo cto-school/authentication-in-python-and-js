@@ -1,0 +1,20 @@
+# Flask - Web framework
+Flask==3.0.0
+
+# Flask-CORS - Allow frontend to call backend API
+flask-cors==4.0.0
+
+# Flask-SQLAlchemy - Database ORM
+Flask-SQLAlchemy==3.1.1
+
+# bcrypt - Password hashing
+bcrypt==4.1.2
+
+# PyJWT - Create and verify JWT tokens
+PyJWT==2.8.0
+
+# requests - For calling Mailgun API
+requests==2.31.0
+
+# python-dotenv - Load environment variables from .env file
+python-dotenv==1.0.0

@@ -1,0 +1,8 @@
+# Flask - Web framework for creating API
+Flask==3.0.0
+
+# Flask-CORS - Allow frontend to call backend API (Cross-Origin)
+flask-cors==4.0.0
+
+# PyJWT - Create and verify JWT tokens
+PyJWT==2.8.0
