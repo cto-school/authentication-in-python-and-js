@@ -159,14 +159,14 @@ EXERCISE 1: Test Protected Route Without Token
 ----------------------------------------------
 Using browser or Postman:
 
-1. Try: GET http://localhost:5000/profile (no Authorization header)
+1. Try: GET http://localhost:5004/profile (no Authorization header)
    What response do you get?
 
-2. Try: GET http://localhost:5000/profile
+2. Try: GET http://localhost:5004/profile
    Header: Authorization: InvalidToken
    What response do you get?
 
-3. Try: GET http://localhost:5000/profile
+3. Try: GET http://localhost:5004/profile
    Header: Authorization: Bearer invalid.token.here
    What response do you get?
 
