@@ -1,8 +1,13 @@
 from flask import Flask, jsonify, request, send_file  # Flask web framework
 from flask_cors import CORS  # Allow cross-origin requests
 from flask_sqlalchemy import SQLAlchemy  # Database ORM
-import bcrypt  # Password hashing
-import jwt  # JWT tokens
+# Password hashing using werkzeug.security (comes built-in with Flask)
+# Why werkzeug instead of bcrypt?
+# - No extra installation needed (already part of Flask)
+# - Simpler API (no manual encoding/decoding of strings)
+# - Uses secure algorithms (pbkdf2:sha256 by default)
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt  # This is from 'pyjwt' package (pip install pyjwt), NOT the 'jwt' package
 from datetime import datetime, timedelta  # For timestamps and token expiration
 import os  # For file paths
 
@@ -38,17 +43,25 @@ class User(db.Model):  # User model
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Registration time
 
 
-def hash_password(password):  # Hash plain password
-    password_bytes = password.encode('utf-8')  # Convert to bytes
-    salt = bcrypt.gensalt()  # Generate salt
-    hashed = bcrypt.hashpw(password_bytes, salt)  # Hash with salt
-    return hashed.decode('utf-8')  # Return as string
+# Hash password using werkzeug's secure hashing
+# Returns a string like: "pbkdf2:sha256:600000$salt$hash"
+def hash_password(password):
+    return generate_password_hash(password)
 
 
-def check_password(password, hashed_password):  # Verify password against hash
-    password_bytes = password.encode('utf-8')  # Convert entered password to bytes
-    hashed_bytes = hashed_password.encode('utf-8')  # Convert stored hash to bytes
-    return bcrypt.checkpw(password_bytes, hashed_bytes)  # Returns True if match, False if not
+# ============================================
+# PASSWORD VERIFICATION - How login works
+# ============================================
+# We can't "decrypt" a hash (it's one-way), so how do we verify?
+# 1. User enters password during login
+# 2. check_password_hash() hashes the entered password with the SAME salt
+# 3. Compares the new hash with stored hash
+# 4. If they match = correct password!
+#
+# Note: check_password_hash(hash, password) - hash comes FIRST
+# ============================================
+def check_password(password, hashed_password):
+    return check_password_hash(hashed_password, password)
 
 
 def create_token(user):  # Create JWT token for user
@@ -167,8 +180,8 @@ def test_password():
     })
 
 Test with: {"password": "secret123", "wrong_password": "wrong"}
-Question: How does bcrypt.checkpw() know the salt?
-(Hint: The salt is stored as part of the hash)
+Question: How does check_password_hash() know the salt?
+(Hint: The salt is embedded in the hash string itself: "pbkdf2:sha256:iterations$SALT$hash")
 
 
 EXERCISE 3: Add "Remember Me" Feature
@@ -217,5 +230,6 @@ SELF-STUDY QUESTIONS
 
 4. What is the difference between 401 (Unauthorized) and 403 (Forbidden)?
 
-5. Why do we hash passwords before storing, but use checkpw() to verify?
+5. Why do we hash passwords before storing, but use check_password_hash() to verify?
+   (Hint: Hashing is one-way - you can't reverse it to get the original password)
 """

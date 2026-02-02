@@ -1,8 +1,9 @@
 from flask import Flask, jsonify, request, send_file  # Flask framework
 from flask_cors import CORS  # Cross-origin requests
 from flask_sqlalchemy import SQLAlchemy  # Database ORM
-import bcrypt  # Password hashing
-import jwt  # JWT tokens
+# Password hashing using werkzeug.security (comes built-in with Flask)
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt  # From 'pyjwt' package (pip install pyjwt), NOT 'jwt'
 import secrets  # Random tokens
 import requests  # For calling Mailgun API
 import os  # For environment variables
@@ -58,12 +59,14 @@ class PasswordResetToken(db.Model):  # Reset token model
     user = db.relationship('User', backref='reset_tokens')
 
 
-def hash_password(password):  # Hash password
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+# Hash password - converts plain text to secure hash
+def hash_password(password):
+    return generate_password_hash(password)
 
 
-def check_password(password, hashed_password):  # Verify password
-    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+# Verify password - compares plain password with stored hash
+def check_password(password, hashed_password):
+    return check_password_hash(hashed_password, password)
 
 
 def create_token(user):  # Create JWT

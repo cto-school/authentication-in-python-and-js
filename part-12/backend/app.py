@@ -1,14 +1,46 @@
-from flask import Flask, jsonify, request, g, send_file  # Flask framework
-from flask_cors import CORS  # Cross-origin requests
-from flask_sqlalchemy import SQLAlchemy  # Database ORM
-import bcrypt  # Password hashing
-import jwt  # JWT tokens
-from datetime import datetime, timedelta  # Date/time
-from functools import wraps  # Decorator helper
-import os  # For file paths
+# ================================================================================
+# PART 12: CHANGE PASSWORD - Secure Password Updates
+# ================================================================================
+#
+# This part covers allowing users to change their password while logged in.
+#
+# CHANGE PASSWORD vs FORGOT PASSWORD:
+#   - Change Password: User is logged in, knows current password
+#   - Forgot Password: User is NOT logged in, uses email reset (Parts 5-7)
+#
+# WHY REQUIRE CURRENT PASSWORD?
+#   Security scenario: You leave your computer unlocked, someone sits down.
+#   - Without current password: They change your password, lock you out
+#   - With current password: They can't change it without knowing it
+#
+# FLOW:
+#   1. User is logged in (has valid token)
+#   2. User enters: current password + new password
+#   3. Server verifies current password is correct
+#   4. Server validates new password (length, different from current)
+#   5. Server updates password hash
+#   6. Server records when password was changed
+#
+# NEW CONCEPTS IN THIS PART:
+#   - password_changed_at field for tracking
+#   - Verifying current password before allowing change
+#   - Preventing same password reuse
+#   - Potential token invalidation strategies
+#
+# ================================================================================
 
-app = Flask(__name__)  # Create Flask app
-CORS(app)  # Enable CORS
+from flask import Flask, jsonify, request, g, send_file
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+# Password hashing using werkzeug.security (comes built-in with Flask)
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt  # From 'pyjwt' package (pip install pyjwt), NOT 'jwt'
+from datetime import datetime, timedelta
+from functools import wraps
+import os
+
+app = Flask(__name__)
+CORS(app)
 
 
 @app.route('/')  # Serve the frontend HTML
@@ -30,29 +62,58 @@ SECRET_KEY = 'your-secret-key-keep-it-safe'  # JWT secret
 db = SQLAlchemy(app)  # Database instance
 
 
-class User(db.Model):  # User model with password change tracking
-    __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)  # Primary key
-    email = db.Column(db.String(120), unique=True, nullable=False)  # Unique email
-    password = db.Column(db.String(255), nullable=False)  # Hashed password
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Created time
-    password_changed_at = db.Column(db.DateTime, nullable=True)  # NEW: Track when password was last changed
+# ================================================================================
+# USER MODEL WITH PASSWORD CHANGE TRACKING
+# ================================================================================
+# New field: password_changed_at
+#
+# Why track when password was changed?
+#   1. Audit trail: Know when password was last updated
+#   2. Token invalidation: Can invalidate tokens issued before password change
+#   3. Security policies: "Change password every 90 days" enforcement
+#   4. User info: Show user when they last changed password
+#
+# Database structure:
+#   +----+---------+----------+---------------------+---------------------+
+#   | id | email   | password | created_at          | password_changed_at |
+#   +----+---------+----------+---------------------+---------------------+
+#   | 1  | a@b.com | hash...  | 2024-01-01 10:00:00 | 2024-01-15 14:30:00 |
+#   | 2  | c@d.com | hash...  | 2024-01-05 12:00:00 | NULL                |
+#   +----+---------+----------+---------------------+---------------------+
+#
+# password_changed_at = NULL means password was never changed after registration
+# ================================================================================
 
-    def to_dict(self):  # Convert to dictionary
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # NEW: Track when password was last changed
+    # nullable=True because it's NULL until first password change
+    password_changed_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        """Convert to dictionary, including password change timestamp."""
         return {
             'id': self.id,
             'email': self.email,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            # Show when password was last changed (or None if never)
             'password_changed_at': self.password_changed_at.strftime('%Y-%m-%d %H:%M:%S') if self.password_changed_at else None
         }
 
 
-def hash_password(password):  # Hash password
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+# Hash password - converts plain text to secure hash
+def hash_password(password):
+    return generate_password_hash(password)
 
 
-def check_password(password, hashed_password):  # Verify password
-    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+# Verify password - compares plain password with stored hash
+def check_password(password, hashed_password):
+    return check_password_hash(hashed_password, password)
 
 
 def create_token(user):  # Create JWT token
@@ -135,38 +196,113 @@ def get_profile():
     return jsonify({'message': 'Profile retrieved!', 'profile': user.to_dict()})
 
 
-@app.route('/change-password', methods=['POST'])  # Change password endpoint (MAIN FEATURE OF THIS PART!)
-@token_required  # Must be logged in
-def change_password():
-    data = request.get_json()  # Get JSON data
-    current_password = data.get('current_password')  # Get current password
-    new_password = data.get('new_password')  # Get new password
+# ================================================================================
+# CHANGE PASSWORD ENDPOINT
+# ================================================================================
+# This is the main feature of Part 12 - allowing logged-in users to change
+# their password securely.
+#
+# REQUEST FORMAT:
+#   POST /change-password
+#   Headers: Authorization: Bearer <token>
+#   Body: { "current_password": "old123", "new_password": "new456" }
+#
+# VALIDATION STEPS (in order):
+#   1. Current password is provided
+#   2. New password is provided
+#   3. User exists (should always pass if token is valid)
+#   4. Current password is CORRECT (security check!)
+#   5. New password meets minimum length
+#   6. New password is DIFFERENT from current
+#   7. Update password hash
+#   8. Record timestamp
+#
+# SECURITY CONSIDERATIONS:
+#   - Requiring current password prevents unauthorized changes
+#   - Preventing same password ensures actual security improvement
+#   - Timestamp enables token invalidation (see exercises)
+# ================================================================================
 
-    if not current_password:  # Step 1: Validate current password provided
+
+@app.route('/change-password', methods=['POST'])
+@token_required  # Must be logged in to change password
+def change_password():
+    """
+    Change password for the currently logged-in user.
+
+    Requires:
+        - Valid JWT token (user is logged in)
+        - Current password (for verification)
+        - New password (meeting requirements)
+    """
+    data = request.get_json()
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    # ================================================================================
+    # STEP 1 & 2: Validate inputs are provided
+    # ================================================================================
+    if not current_password:
         return jsonify({'message': 'Current password is required!'}), 400
 
-    if not new_password:  # Step 2: Validate new password provided
+    if not new_password:
         return jsonify({'message': 'New password is required!'}), 400
 
-    user = User.query.get(g.current_user['user_id'])  # Step 3: Get current user
+    # ================================================================================
+    # STEP 3: Get user from database
+    # ================================================================================
+    # We get user_id from the JWT token (set by @token_required)
+    # This should always succeed if token is valid
+    user = User.query.get(g.current_user['user_id'])
 
-    if not user:  # User not found
+    if not user:
         return jsonify({'message': 'User not found!'}), 404
 
-    if not check_password(current_password, user.password):  # Step 4: Verify current password is correct
+    # ================================================================================
+    # STEP 4: Verify current password is CORRECT
+    # ================================================================================
+    # This is the KEY security check!
+    # Without this, anyone with physical access to an unlocked session
+    # could change the password and lock out the real user.
+    # ================================================================================
+    if not check_password(current_password, user.password):
+        # Return 401 (not 400) because this is an authentication failure
         return jsonify({'message': 'Current password is incorrect!'}), 401
 
-    if len(new_password) < 6:  # Step 5: Validate new password length
+    # ================================================================================
+    # STEP 5: Validate new password requirements
+    # ================================================================================
+    # Minimum length check (you could add more: uppercase, number, symbol)
+    if len(new_password) < 6:
         return jsonify({'message': 'New password must be at least 6 characters!'}), 400
 
-    if check_password(new_password, user.password):  # Step 6: Check new password is different from current
+    # ================================================================================
+    # STEP 6: Ensure new password is DIFFERENT
+    # ================================================================================
+    # Why prevent same password?
+    #   - If someone says "change password", they want increased security
+    #   - Using same password defeats the purpose
+    #   - Prevents "password rotation" attacks (change A->B->A->B...)
+    # ================================================================================
+    if check_password(new_password, user.password):
         return jsonify({'message': 'New password must be different from current password!'}), 400
 
-    user.password = hash_password(new_password)  # Step 7: Hash and save new password
-    user.password_changed_at = datetime.utcnow()  # Step 8: Record when password was changed
-    db.session.commit()  # Save changes
+    # ================================================================================
+    # STEP 7 & 8: Update password and record timestamp
+    # ================================================================================
+    user.password = hash_password(new_password)  # Hash the new password
+    user.password_changed_at = datetime.utcnow()  # Record when it changed
+    db.session.commit()
 
-    return jsonify({  # Step 9: Return success
+    # ================================================================================
+    # STEP 9: Return success
+    # ================================================================================
+    # Note: User's existing token still works. For extra security, you could:
+    #   1. Return a new token
+    #   2. Invalidate old tokens (requires blacklist or version number)
+    #   3. Simply inform user to re-login
+    # ================================================================================
+    return jsonify({
         'message': 'Password changed successfully!',
         'password_changed_at': user.password_changed_at.strftime('%Y-%m-%d %H:%M:%S')
     })

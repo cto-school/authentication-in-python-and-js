@@ -1,15 +1,47 @@
-from flask import Flask, jsonify, request, g, send_file  # Flask framework
-from flask_cors import CORS  # Cross-origin requests
-from flask_sqlalchemy import SQLAlchemy  # Database ORM
-import bcrypt  # Password hashing
-import jwt  # JWT tokens
-import secrets  # For generating random tokens
-from datetime import datetime, timedelta  # Date/time
-from functools import wraps  # Decorator helper
-import os  # For file paths
+# ================================================================================
+# PART 11: EMAIL VERIFICATION
+# ================================================================================
+#
+# This part adds email verification - ensuring users own the email they registered with.
+#
+# WHY VERIFY EMAILS?
+#   1. Prevent fake accounts (someone using random emails)
+#   2. Prevent impersonation (someone using YOUR email)
+#   3. Enable account recovery (password reset requires valid email)
+#   4. Reduce spam registrations
+#   5. Legal compliance (GDPR, etc.)
+#
+# HOW IT WORKS:
+#   1. User registers → Account created with is_verified=False
+#   2. Server generates verification token
+#   3. Server sends verification link (in production: via email)
+#   4. User clicks link → Token is verified
+#   5. Account marked as verified (is_verified=True)
+#   6. User can now access verified-only features
+#
+# NEW CONCEPTS IN THIS PART:
+#   - is_verified field in User model
+#   - verification_token and verification_expires fields
+#   - @verified_required decorator (stacks with @token_required)
+#   - Resend verification functionality
+#   - Different access levels (logged in vs verified)
+#
+# ================================================================================
 
-app = Flask(__name__)  # Create Flask app
-CORS(app)  # Enable CORS
+from flask import Flask, jsonify, request, g, send_file
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+# Password hashing using werkzeug.security (comes built-in with Flask)
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt  # From 'pyjwt' package (pip install pyjwt), NOT 'jwt'
+# secrets module - Same as Part 5, for cryptographically secure random tokens
+import secrets
+from datetime import datetime, timedelta
+from functools import wraps
+import os
+
+app = Flask(__name__)
+CORS(app)
 
 
 @app.route('/')  # Serve the frontend HTML
@@ -30,7 +62,7 @@ def verify_page():
     return send_file(html_path)
 
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'  # Database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users_new_new.db'  # Database
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # Disable tracking
 SECRET_KEY = 'your-secret-key-keep-it-safe'  # JWT secret
 FRONTEND_URL = 'http://localhost:5011'  # Frontend URL for verification link
@@ -38,156 +70,334 @@ FRONTEND_URL = 'http://localhost:5011'  # Frontend URL for verification link
 db = SQLAlchemy(app)  # Database instance
 
 
-class User(db.Model):  # User model with verification fields
+# ================================================================================
+# USER MODEL WITH VERIFICATION FIELDS
+# ================================================================================
+# New fields added for email verification:
+#
+#   is_verified          - Boolean: Has user verified their email?
+#   verification_token   - The random token sent in verification link
+#   verification_expires - When the verification token expires
+#
+# User lifecycle:
+#   1. Register → is_verified=False, token generated
+#   2. Click verification link → is_verified=True, token cleared
+#
+# Database structure:
+#   +----+---------+----------+-------------+--------------------+---------------------+
+#   | id | email   | password | is_verified | verification_token | verification_expires|
+#   +----+---------+----------+-------------+--------------------+---------------------+
+#   | 1  | a@b.com | hash...  | False       | abc123...          | 2024-01-16 12:00:00 |
+#   | 2  | c@d.com | hash...  | True        | NULL               | NULL                |
+#   +----+---------+----------+-------------+--------------------+---------------------+
+# ================================================================================
+
+
+class User(db.Model):
     __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)  # Primary key
-    email = db.Column(db.String(120), unique=True, nullable=False)  # Unique email
-    password = db.Column(db.String(255), nullable=False)  # Hashed password
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Created time
-    is_verified = db.Column(db.Boolean, default=False)  # NEW: Is email verified?
-    verification_token = db.Column(db.String(100), unique=True, nullable=True)  # NEW: Verification token
-    verification_expires = db.Column(db.DateTime, nullable=True)  # NEW: When token expires
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def to_dict(self):  # Convert to dictionary
-        return {'id': self.id, 'email': self.email, 'is_verified': self.is_verified, 'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+    # ================================================================================
+    # VERIFICATION FIELDS
+    # ================================================================================
+    # is_verified: Starts False, becomes True after email verification
+    # verification_token: Random token in verification link, cleared after use
+    # verification_expires: Token expiration time (e.g., 24 hours after registration)
+    # ================================================================================
+    is_verified = db.Column(db.Boolean, default=False)
+    verification_token = db.Column(db.String(100), unique=True, nullable=True)
+    verification_expires = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        """Convert to dictionary, including verification status."""
+        return {
+            'id': self.id,
+            'email': self.email,
+            'is_verified': self.is_verified,  # Frontend can show verification badge
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
 
 
-def hash_password(password):  # Hash password
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+# Hash password - converts plain text to secure hash
+def hash_password(password):
+    return generate_password_hash(password)
 
 
-def check_password(password, hashed_password):  # Verify password
-    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+# Verify password - compares plain password with stored hash
+def check_password(password, hashed_password):
+    return check_password_hash(hashed_password, password)
 
 
-def create_token(user):  # Create JWT with is_verified included
-    payload = {'user_id': user.id, 'email': user.email, 'is_verified': user.is_verified, 'exp': datetime.utcnow() + timedelta(hours=24)}  # is_verified in payload
+# ================================================================================
+# JWT TOKEN WITH VERIFICATION STATUS
+# ================================================================================
+# The is_verified status is included in the JWT token.
+#
+# IMPORTANT: If user verifies email, old tokens still have is_verified=False!
+# User must re-login to get a new token with is_verified=True.
+#
+# Token payload:
+#   {
+#       "user_id": 1,
+#       "email": "user@example.com",
+#       "is_verified": true,       ← NEW!
+#       "exp": 1234567890
+#   }
+# ================================================================================
+
+
+def create_token(user):
+    """Create JWT token with verification status included."""
+    payload = {
+        'user_id': user.id,
+        'email': user.email,
+        'is_verified': user.is_verified,  # Include verification status
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
 
-def generate_verification_token():  # Generate random URL-safe token
-    return secrets.token_urlsafe(32)  # 32 bytes = 43 characters
+def generate_verification_token():
+    """
+    Generate a cryptographically secure URL-safe token.
+
+    secrets.token_urlsafe(32):
+        - 32 bytes of randomness
+        - Encoded as URL-safe base64 (43 characters)
+        - Can be safely used in URLs without encoding
+        - Example: "dGhpcyBpcyBhIHRlc3Qgc3RyaW5n..."
+    """
+    return secrets.token_urlsafe(32)
 
 
-def token_required(f):  # Decorator to require valid JWT
+def token_required(f):
+    """Decorator to require valid JWT token (logged in)."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')  # Get auth header
+        auth_header = request.headers.get('Authorization')
 
-        if not auth_header:  # No header
+        if not auth_header:
             return jsonify({'message': 'Token is missing!'}), 401
 
         try:
-            parts = auth_header.split(' ')  # Split "Bearer <token>"
-            if len(parts) != 2 or parts[0] != 'Bearer':  # Invalid format
+            parts = auth_header.split(' ')
+            if len(parts) != 2 or parts[0] != 'Bearer':
                 return jsonify({'message': 'Invalid token format!'}), 401
 
-            token = parts[1]  # Get token
-            decoded = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])  # Decode token
+            token = parts[1]
+            decoded = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
 
-            g.current_user = {'user_id': decoded['user_id'], 'email': decoded['email'], 'is_verified': decoded.get('is_verified', False)}  # Store user info
+            # Store user info INCLUDING is_verified for @verified_required
+            g.current_user = {
+                'user_id': decoded['user_id'],
+                'email': decoded['email'],
+                'is_verified': decoded.get('is_verified', False)
+            }
 
-        except jwt.ExpiredSignatureError:  # Token expired
+        except jwt.ExpiredSignatureError:
             return jsonify({'message': 'Token has expired!'}), 401
-        except jwt.InvalidTokenError:  # Invalid token
+        except jwt.InvalidTokenError:
             return jsonify({'message': 'Invalid token!'}), 401
 
-        return f(*args, **kwargs)  # Call protected function
+        return f(*args, **kwargs)
     return decorated
 
 
-def verified_required(f):  # Decorator to require verified email - MUST use AFTER @token_required
+# ================================================================================
+# VERIFIED REQUIRED DECORATOR
+# ================================================================================
+# This decorator adds a verification check ON TOP OF authentication.
+#
+# Two-level access control:
+#   Level 1: @token_required      - User is logged in
+#   Level 2: @verified_required   - User is logged in AND email is verified
+#
+# Use cases:
+#   - Profile viewing: @token_required only (unverified can view)
+#   - Posting content: @token_required + @verified_required (must be verified)
+#   - Payment: @token_required + @verified_required (must be verified)
+#
+# Decorator stacking:
+#   @app.route('/protected')
+#   @token_required         ← Runs first: Is user logged in?
+#   @verified_required      ← Runs second: Is email verified?
+#   def protected_route():
+# ================================================================================
+
+
+def verified_required(f):
+    """
+    Decorator to require verified email.
+    MUST be used AFTER @token_required (stacked below it).
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not g.current_user.get('is_verified'):  # Check if verified
-            return jsonify({'message': 'Email not verified! Please verify your email first.', 'error': 'EMAIL_NOT_VERIFIED'}), 403
+        if not g.current_user.get('is_verified'):
+            return jsonify({
+                'message': 'Email not verified! Please verify your email first.',
+                'error': 'EMAIL_NOT_VERIFIED'  # Frontend can show verification prompt
+            }), 403  # 403 Forbidden: Logged in but not permitted
 
-        return f(*args, **kwargs)  # Call protected function
+        return f(*args, **kwargs)
     return decorated
 
 
-@app.route('/register', methods=['POST'])  # Register - creates unverified user
-def register():
-    data = request.get_json()  # Get JSON data
-    email, password = data.get('email'), data.get('password')  # Get credentials
+# ================================================================================
+# REGISTRATION WITH VERIFICATION
+# ================================================================================
+# Registration now creates an UNVERIFIED account.
+# User must verify email before accessing certain features.
+#
+# Flow:
+#   1. User submits email + password
+#   2. Server creates user with is_verified=False
+#   3. Server generates verification token
+#   4. Server returns verification link (in production: sends via email)
+#   5. User clicks link to verify
+# ================================================================================
 
-    if not email or not password:  # Validate input
+
+@app.route('/register', methods=['POST'])
+def register():
+    """Register a new user - starts as unverified."""
+    data = request.get_json()
+    email, password = data.get('email'), data.get('password')
+
+    if not email or not password:
         return jsonify({'message': 'Email and password are required!'}), 400
 
-    if User.query.filter_by(email=email).first():  # Check email exists
+    if User.query.filter_by(email=email).first():
         return jsonify({'message': 'Email already exists!'}), 400
 
-    verification_token = generate_verification_token()  # Generate verification token
+    # Generate verification token
+    verification_token = generate_verification_token()
 
+    # Create user with verification fields
     new_user = User(
         email=email,
         password=hash_password(password),
-        is_verified=False,  # Start as unverified
-        verification_token=verification_token,  # Store token
-        verification_expires=datetime.utcnow() + timedelta(hours=24)  # Token expires in 24 hours
+        is_verified=False,  # Starts unverified!
+        verification_token=verification_token,
+        verification_expires=datetime.utcnow() + timedelta(hours=24)
     )
 
-    db.session.add(new_user)  # Add to session
-    db.session.commit()  # Save to database
+    db.session.add(new_user)
+    db.session.commit()
 
-    verification_link = f"{FRONTEND_URL}/verify.html?token={verification_token}"  # Build verification link
+    # Build verification link
+    # In production, this link would be sent via email (see Part 7)
+    verification_link = f"{FRONTEND_URL}/verify.html?token={verification_token}"
 
     return jsonify({
         'message': 'Registration successful! Please verify your email.',
         'user': new_user.to_dict(),
-        'verification_link': verification_link,  # For local testing (in production, send via email)
+        'verification_link': verification_link,  # For testing only!
         'note': 'In production, this link would be sent via email'
     }), 201
 
 
-@app.route('/verify-email', methods=['GET'])  # Verify email using token
-def verify_email():
-    token = request.args.get('token')  # Get token from URL: /verify-email?token=xxx
+# ================================================================================
+# EMAIL VERIFICATION ENDPOINT
+# ================================================================================
+# This endpoint is called when user clicks the verification link.
+#
+# Validation checks:
+#   1. Token is provided
+#   2. Token exists in database (matches a user)
+#   3. User isn't already verified
+#   4. Token hasn't expired
+#
+# After verification:
+#   - is_verified = True
+#   - verification_token = NULL (cleared, one-time use)
+#   - verification_expires = NULL (no longer needed)
+# ================================================================================
 
-    if not token:  # No token
+
+@app.route('/verify-email', methods=['GET'])
+def verify_email():
+    """Verify email using the token from the verification link."""
+    # Token comes from URL: /verify-email?token=abc123
+    token = request.args.get('token')
+
+    if not token:
         return jsonify({'message': 'Verification token is required!'}), 400
 
-    user = User.query.filter_by(verification_token=token).first()  # Find user by token
+    # Find user by verification token
+    user = User.query.filter_by(verification_token=token).first()
 
-    if not user:  # Token not found
+    if not user:
         return jsonify({'message': 'Invalid verification token!'}), 400
 
-    if user.is_verified:  # Already verified
+    if user.is_verified:
         return jsonify({'message': 'Email already verified!', 'user': user.to_dict()})
 
-    if user.verification_expires < datetime.utcnow():  # Token expired
+    # Check if token has expired
+    if user.verification_expires < datetime.utcnow():
         return jsonify({'message': 'Verification token has expired! Please request a new one.'}), 400
 
-    user.is_verified = True  # Mark as verified
-    user.verification_token = None  # Clear token (one-time use)
-    user.verification_expires = None  # Clear expiration
-    db.session.commit()  # Save changes
+    # ================================================================================
+    # VERIFICATION SUCCESS
+    # ================================================================================
+    # Mark as verified and clear token (one-time use security)
+    # Clearing token prevents replay attacks (using same link twice)
+    # ================================================================================
+    user.is_verified = True
+    user.verification_token = None  # Clear - token is now used
+    user.verification_expires = None  # Clear - no longer needed
+    db.session.commit()
 
     return jsonify({'message': 'Email verified successfully! You can now login.', 'user': user.to_dict()})
 
 
-@app.route('/resend-verification', methods=['POST'])  # Resend verification email
-def resend_verification():
-    data = request.get_json()  # Get JSON data
-    email = data.get('email')  # Get email
+# ================================================================================
+# RESEND VERIFICATION
+# ================================================================================
+# Users might need to resend verification if:
+#   - Original email went to spam
+#   - Token expired before they clicked
+#   - They deleted the email by accident
+#
+# Security considerations:
+#   1. Don't reveal if email exists (prevents email enumeration)
+#   2. Generate NEW token (invalidates old one)
+#   3. Consider rate limiting (prevent spam)
+# ================================================================================
 
-    if not email:  # No email
+
+@app.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    """Resend verification email with a new token."""
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
         return jsonify({'message': 'Email is required!'}), 400
 
-    user = User.query.filter_by(email=email).first()  # Find user
+    user = User.query.filter_by(email=email).first()
 
-    if not user:  # Don't reveal if email exists (security)
+    # ================================================================================
+    # SECURITY: Don't Reveal Email Existence
+    # ================================================================================
+    # If email doesn't exist, return the SAME message as success.
+    # This prevents attackers from discovering which emails are registered.
+    # ================================================================================
+    if not user:
         return jsonify({'message': 'If this email exists, a verification link has been sent.'})
 
-    if user.is_verified:  # Already verified
+    if user.is_verified:
         return jsonify({'message': 'Email is already verified!'})
 
-    verification_token = generate_verification_token()  # Generate new token
-    user.verification_token = verification_token  # Update token
-    user.verification_expires = datetime.utcnow() + timedelta(hours=24)  # Reset expiration
-    db.session.commit()  # Save changes
+    # Generate NEW token (invalidates old one automatically)
+    verification_token = generate_verification_token()
+    user.verification_token = verification_token
+    user.verification_expires = datetime.utcnow() + timedelta(hours=24)
+    db.session.commit()
 
-    verification_link = f"{FRONTEND_URL}/verify.html?token={verification_token}"  # Build link
+    verification_link = f"{FRONTEND_URL}/verify.html?token={verification_token}"
 
     return jsonify({
         'message': 'Verification link generated!',
@@ -196,45 +406,95 @@ def resend_verification():
     })
 
 
-@app.route('/login', methods=['POST'])  # Login - works for both verified and unverified
-def login():
-    data = request.get_json()  # Get JSON data
-    email, password = data.get('email'), data.get('password')  # Get credentials
+# ================================================================================
+# LOGIN - Works for Both Verified and Unverified Users
+# ================================================================================
+# Design choice: Allow unverified users to login.
+#
+# Alternative approach: Block login until verified
+#   PROS: Forces verification, simpler access control
+#   CONS: Users can't access their account at all until verified
+#
+# Our approach: Allow login, restrict features
+#   PROS: Users can still see their account, resend verification
+#   CONS: Need @verified_required on sensitive routes
+# ================================================================================
 
-    if not email or not password:  # Validate input
+
+@app.route('/login', methods=['POST'])
+def login():
+    """Login - works for verified AND unverified users."""
+    data = request.get_json()
+    email, password = data.get('email'), data.get('password')
+
+    if not email or not password:
         return jsonify({'message': 'Email and password are required!'}), 400
 
-    user = User.query.filter_by(email=email).first()  # Find user
+    user = User.query.filter_by(email=email).first()
 
-    if not user or not check_password(password, user.password):  # Invalid credentials
+    if not user or not check_password(password, user.password):
         return jsonify({'message': 'Invalid email or password!'}), 401
 
-    token = create_token(user)  # Create JWT
+    # Create token with is_verified status
+    token = create_token(user)
 
-    response = {'message': 'Login successful!', 'token': token, 'user': user.to_dict()}
+    response = {
+        'message': 'Login successful!',
+        'token': token,
+        'user': user.to_dict()
+    }
 
-    if not user.is_verified:  # Warn if not verified
+    # Warn unverified users
+    if not user.is_verified:
         response['warning'] = 'Email not verified. Some features may be restricted.'
 
     return jsonify(response)
 
 
-@app.route('/profile', methods=['GET'])  # Protected route - ONLY verified users
-@token_required
-@verified_required  # Requires verified email
-def get_profile():
-    user = User.query.get(g.current_user['user_id'])  # Get user
+# ================================================================================
+# PROTECTED ROUTES - Different Levels of Access
+# ================================================================================
+# Two examples showing different access levels:
+#
+#   /profile            - Requires login AND verification
+#   /profile-unverified - Requires login only
+#
+# Use @verified_required for:
+#   - Posting content
+#   - Making purchases
+#   - Sending messages
+#   - Any feature requiring confirmed identity
+#
+# Skip @verified_required for:
+#   - Viewing own basic profile
+#   - Accessing settings
+#   - Resending verification
+# ================================================================================
 
-    if not user:  # User not found
+
+@app.route('/profile', methods=['GET'])
+@token_required      # First: Is user logged in?
+@verified_required   # Second: Is email verified?
+def get_profile():
+    """Get full profile - VERIFIED USERS ONLY."""
+    user = User.query.get(g.current_user['user_id'])
+
+    if not user:
         return jsonify({'message': 'User not found!'}), 404
 
     return jsonify({'message': 'Profile retrieved!', 'profile': user.to_dict()})
 
 
-@app.route('/profile-unverified', methods=['GET'])  # Route for ANY logged-in user (verified or not)
-@token_required  # Only requires login, not verification
+@app.route('/profile-unverified', methods=['GET'])
+@token_required  # Only requires login, NOT verification
 def get_profile_unverified():
-    user = User.query.get(g.current_user['user_id'])  # Get user
+    """
+    Get basic profile - ANY logged-in user (verified OR unverified).
+
+    This demonstrates allowing unverified users limited access.
+    They can see their profile but might not be able to do other actions.
+    """
+    user = User.query.get(g.current_user['user_id'])
 
     return jsonify({
         'message': 'Basic profile retrieved!',

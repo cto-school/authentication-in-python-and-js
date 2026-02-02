@@ -1,10 +1,13 @@
 from flask import Flask, jsonify, request, g, send_file  # g is Flask's global object for request-scoped data
 from flask_cors import CORS  # Cross-origin support
 from flask_sqlalchemy import SQLAlchemy  # Database ORM
-import bcrypt  # Password hashing
-import jwt  # JWT tokens
+# Password hashing using werkzeug.security (comes built-in with Flask)
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt  # From 'pyjwt' package (pip install pyjwt), NOT 'jwt'
 from datetime import datetime, timedelta  # Date/time utilities
-from functools import wraps  # For creating decorators
+# functools.wraps - Used when creating decorators to preserve the original function's metadata
+# Without @wraps, the decorated function would lose its __name__ and __doc__ attributes
+from functools import wraps
 import os  # For file paths
 
 app = Flask(__name__)  # Create Flask app
@@ -38,12 +41,15 @@ class User(db.Model):  # User model
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Created timestamp
 
 
-def hash_password(password):  # Hash password
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+# Hash password - converts plain text to secure hash
+def hash_password(password):
+    return generate_password_hash(password)
 
 
-def check_password(password, hashed_password):  # Verify password
-    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+# Verify password - compares plain password with stored hash
+# Returns True if password matches, False otherwise
+def check_password(password, hashed_password):
+    return check_password_hash(hashed_password, password)
 
 
 def create_token(user):  # Create JWT token
@@ -51,36 +57,163 @@ def create_token(user):  # Create JWT token
     return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
 
-def token_required(f):  # Decorator function to protect routes
-    @wraps(f)  # Preserves original function's name and docstring
-    def decorated(*args, **kwargs):  # Wrapper function that runs before protected route
-        auth_header = request.headers.get('Authorization')  # Get Authorization header from request
+# ================================================================================
+# DECORATOR PATTERN - What is a Decorator?
+# ================================================================================
+#
+# A decorator is a function that wraps another function to add extra behavior.
+# Think of it like a "wrapper" or "middleware" that runs BEFORE and/or AFTER your function.
+#
+# WITHOUT decorator (repetitive code):
+#     @app.route('/profile')
+#     def get_profile():
+#         token = check_token()      # Must repeat this in EVERY protected route
+#         if not token:
+#             return error
+#         # actual code...
+#
+#     @app.route('/dashboard')
+#     def get_dashboard():
+#         token = check_token()      # Repeating same code again!
+#         if not token:
+#             return error
+#         # actual code...
+#
+# WITH decorator (clean code):
+#     @app.route('/profile')
+#     @token_required              # Just add this line - token check happens automatically!
+#     def get_profile():
+#         # actual code...
+#
+#     @app.route('/dashboard')
+#     @token_required              # Same here - no repetition!
+#     def get_dashboard():
+#         # actual code...
+#
+# ================================================================================
+# HOW DECORATORS WORK - Step by Step
+# ================================================================================
+#
+# When you write:
+#     @token_required
+#     def get_profile():
+#         ...
+#
+# Python transforms it to:
+#     get_profile = token_required(get_profile)
+#
+# So when someone calls get_profile(), they're actually calling the "decorated" version,
+# which runs the token check FIRST, and only calls the real get_profile() if token is valid.
+#
+# EXECUTION FLOW:
+#     1. User calls GET /profile
+#     2. Flask routes to get_profile()
+#     3. But get_profile is wrapped, so decorated() runs first
+#     4. decorated() checks the token
+#     5. If token invalid → return error (get_profile never runs)
+#     6. If token valid → call f(*args, **kwargs) which is the real get_profile()
+#
+# ================================================================================
 
-        if not auth_header:  # No header = no token
+def token_required(f):
+    """
+    Decorator that protects routes by requiring a valid JWT token.
+
+    Usage:
+        @app.route('/protected')
+        @token_required
+        def protected_route():
+            # This code only runs if token is valid
+            user_id = g.current_user['user_id']
+            ...
+
+    The decorator:
+    1. Checks if Authorization header exists
+    2. Validates the "Bearer <token>" format
+    3. Decodes and verifies the JWT token
+    4. Stores user info in Flask's g object for the route to use
+    5. Only then calls the actual route function
+    """
+
+    @wraps(f)  # Preserves original function's __name__ and __doc__
+    def decorated(*args, **kwargs):
+        # ----------------------------------------
+        # STEP 1: Get the Authorization header
+        # ----------------------------------------
+        # Frontend sends: headers: { 'Authorization': 'Bearer eyJhbG...' }
+        auth_header = request.headers.get('Authorization')
+
+        if not auth_header:
+            # No Authorization header = user didn't send a token
             return jsonify({'message': 'Token is missing!'}), 401  # 401 = Unauthorized
 
         try:
-            parts = auth_header.split(' ')  # Split "Bearer <token>" into parts
-            if len(parts) != 2 or parts[0] != 'Bearer':  # Must be exactly "Bearer <token>"
+            # ----------------------------------------
+            # STEP 2: Parse the "Bearer <token>" format
+            # ----------------------------------------
+            # Expected format: "Bearer eyJhbGciOiJIUzI1NiIs..."
+            # Split by space: ["Bearer", "eyJhbGciOiJIUzI1NiIs..."]
+            parts = auth_header.split(' ')
+
+            if len(parts) != 2 or parts[0] != 'Bearer':
+                # Invalid format - maybe they sent just the token without "Bearer"
                 return jsonify({'message': 'Invalid token format! Use: Bearer <token>'}), 401
 
-            token = parts[1]  # Extract token (second part)
-            decoded = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])  # Decode and verify token
+            token = parts[1]  # The actual JWT token
 
-            g.current_user = {'user_id': decoded['user_id'], 'email': decoded['email']}  # Store user info in g
+            # ----------------------------------------
+            # STEP 3: Decode and verify the JWT token
+            # ----------------------------------------
+            # jwt.decode() does THREE things:
+            # 1. Decodes the base64 payload
+            # 2. Verifies the signature using SECRET_KEY
+            # 3. Checks if token has expired (exp claim)
+            # If ANY of these fail, it raises an exception
+            decoded = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
 
-        except jwt.ExpiredSignatureError:  # Token has expired
+            # ----------------------------------------
+            # STEP 4: Store user info in Flask's g object
+            # ----------------------------------------
+            # Flask's g (global) object:
+            # - Lives for ONE request only (request-scoped)
+            # - Automatically cleared after request ends
+            # - Perfect for passing data from decorator to route function
+            # - Better than global variables (which persist across requests)
+            g.current_user = {
+                'user_id': decoded['user_id'],
+                'email': decoded['email']
+            }
+
+        except jwt.ExpiredSignatureError:
+            # Token's 'exp' claim is in the past - token has expired
             return jsonify({'message': 'Token has expired!'}), 401
 
-        except jwt.InvalidTokenError:  # Token is invalid
+        except jwt.InvalidTokenError:
+            # Signature verification failed, or token is malformed
+            # This catches: invalid signature, invalid format, missing claims, etc.
             return jsonify({'message': 'Token is invalid!'}), 401
 
-        return f(*args, **kwargs)  # Token valid - call the actual route function
+        # ----------------------------------------
+        # STEP 5: Token is valid! Call the actual route function
+        # ----------------------------------------
+        # f is the original function (e.g., get_profile)
+        # *args, **kwargs passes through any arguments
+        return f(*args, **kwargs)
 
-    return decorated  # Return the wrapper function
+    # Return the wrapper function (this replaces the original function)
+    return decorated
 
 
-@app.route('/register', methods=['POST'])  # Public route - no token needed
+# ================================================================================
+# PUBLIC ROUTES - No token required
+# ================================================================================
+# These routes do NOT have @token_required decorator.
+# Anyone can access them without logging in.
+# This makes sense because:
+#   - /register: User doesn't have an account yet, so can't have a token
+#   - /login: User needs to login to GET a token, so can't require one
+# ================================================================================
+@app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
     email, password = data.get('email'), data.get('password')
@@ -98,7 +231,7 @@ def register():
     return jsonify({'message': 'User registered successfully!', 'user': {'id': new_user.id, 'email': new_user.email}}), 201
 
 
-@app.route('/login', methods=['POST'])  # Public route - no token needed
+@app.route('/login', methods=['POST'])  # Public - returns a token upon successful login
 def login():
     data = request.get_json()
     email, password = data.get('email'), data.get('password')
@@ -114,28 +247,51 @@ def login():
     return jsonify({'message': 'Login successful!', 'token': create_token(user), 'user': {'id': user.id, 'email': user.email}})
 
 
-@app.route('/profile', methods=['GET'])  # Protected route
-@token_required  # This decorator runs BEFORE get_profile(), checks token
+# ================================================================================
+# PROTECTED ROUTE EXAMPLE
+# ================================================================================
+# This route requires authentication - only logged-in users can access it.
+#
+# How it works:
+#   1. User sends: GET /profile with header "Authorization: Bearer <token>"
+#   2. @token_required decorator runs FIRST (before get_profile)
+#   3. If token invalid → decorator returns 401, get_profile() NEVER runs
+#   4. If token valid → decorator stores user info in g.current_user, then calls get_profile()
+#   5. get_profile() can safely access g.current_user (guaranteed to exist)
+# ================================================================================
+@app.route('/profile', methods=['GET'])
+@token_required  # ← This decorator protects the route
 def get_profile():
-    user = User.query.get(g.current_user['user_id'])  # Get user using ID from token
+    # At this point, we KNOW the token is valid (decorator already checked)
+    # User info is available in g.current_user (set by the decorator)
+    user = User.query.get(g.current_user['user_id'])
 
-    if not user:  # User deleted but token still valid
+    if not user:
+        # Edge case: Token is valid but user was deleted from database
+        # Token contains user_id, but that user no longer exists
         return jsonify({'message': 'User not found!'}), 404
 
     return jsonify({
         'message': 'Profile retrieved successfully!',
-        'profile': {'id': user.id, 'email': user.email, 'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+        'profile': {
+            'id': user.id,
+            'email': user.email,
+            'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
     })
 
 
-@app.route('/dashboard', methods=['GET'])  # Another protected route
-@token_required  # Must have valid token
+# Another protected route - demonstrates using g.current_user
+@app.route('/dashboard', methods=['GET'])
+@token_required
 def get_dashboard():
+    # g.current_user was set by @token_required decorator
+    # We can use it directly without any additional checks
     return jsonify({
         'message': 'Dashboard data retrieved!',
         'data': {
-            'welcome': f"Hello, {g.current_user['email']}!",  # Use email from token
-            'stats': {'total_posts': 10, 'total_likes': 50, 'total_comments': 25}  # Dummy data
+            'welcome': f"Hello, {g.current_user['email']}!",
+            'stats': {'total_posts': 10, 'total_likes': 50, 'total_comments': 25}
         }
     })
 

@@ -1,14 +1,43 @@
-from flask import Flask, jsonify, request, g, send_file  # Flask framework
-from flask_cors import CORS  # Cross-origin requests
-from flask_sqlalchemy import SQLAlchemy  # Database ORM
-import bcrypt  # Password hashing
-import jwt  # JWT tokens
-from datetime import datetime, timedelta  # Date/time
-from functools import wraps  # Decorator helper
-import os  # For file paths
+# ================================================================================
+# PART 9: ROLE-BASED ACCESS CONTROL (RBAC)
+# ================================================================================
+#
+# This part covers authorization - controlling WHAT users can do based on roles.
+#
+# AUTHENTICATION vs AUTHORIZATION:
+#   - Authentication: "Who are you?" (login, tokens) ← Parts 2-4
+#   - Authorization: "What can you do?" (roles, permissions) ← THIS PART
+#
+# RBAC CONCEPT:
+#   Instead of checking individual permissions everywhere, assign users to ROLES.
+#   Each role has a set of permissions.
+#
+#   Example:
+#       USER role       → view profile, edit own profile
+#       MODERATOR role  → USER permissions + delete comments, view reports
+#       ADMIN role      → MODERATOR permissions + manage users, delete users
+#
+# NEW CONCEPTS IN THIS PART:
+#   - Role column in User model
+#   - @admin_required decorator (stacks with @token_required)
+#   - 401 vs 403 status codes
+#   - Preventing role escalation attacks
+#   - Self-demotion/self-deletion protection
+#
+# ================================================================================
 
-app = Flask(__name__)  # Create Flask app
-CORS(app)  # Enable CORS
+from flask import Flask, jsonify, request, g, send_file
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+# Password hashing using werkzeug.security (comes built-in with Flask)
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt  # From 'pyjwt' package (pip install pyjwt), NOT 'jwt'
+from datetime import datetime, timedelta
+from functools import wraps
+import os
+
+app = Flask(__name__)
+CORS(app)
 
 
 @app.route('/')  # Serve the frontend HTML
@@ -23,73 +52,182 @@ def index_html():
     return send_file(html_path)
 
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'  # Database
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # Disable tracking
-SECRET_KEY = 'your-secret-key-keep-it-safe'  # JWT secret
-ADMIN_SECRET = 'admin-secret-key'  # Secret for making admin (testing only)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users_new.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+SECRET_KEY = 'your-secret-key-keep-it-safe'
 
-db = SQLAlchemy(app)  # Database instance
+# ================================================================================
+# ADMIN SECRET - For Testing/Development Only!
+# ================================================================================
+# This allows creating admin users via /make-admin endpoint.
+# In PRODUCTION, you would:
+#   1. Create first admin via database migration or CLI command
+#   2. Use an admin panel to promote users
+#   3. NEVER expose a /make-admin endpoint!
+# ================================================================================
+ADMIN_SECRET = 'admin-secret-key'
+
+db = SQLAlchemy(app)
 
 
-class User(db.Model):  # User model with role
+# ================================================================================
+# USER MODEL WITH ROLE
+# ================================================================================
+# The 'role' column is the key addition in this part.
+#
+# Database structure:
+#   +--------+---------+-----------+------+------------+
+#   | id     | email   | password  | role | created_at |
+#   +--------+---------+-----------+------+------------+
+#   | 1      | a@b.com | hash...   | user | 2024-01-01 |
+#   | 2      | c@d.com | hash...   | admin| 2024-01-02 |
+#   +--------+---------+-----------+------+------------+
+#
+# Common role hierarchies:
+#   Simple:   user < admin
+#   Extended: user < moderator < admin < super_admin
+# ================================================================================
+
+
+class User(db.Model):
     __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)  # Primary key
-    email = db.Column(db.String(120), unique=True, nullable=False)  # Unique email
-    password = db.Column(db.String(255), nullable=False)  # Hashed password
-    role = db.Column(db.String(20), default='user', nullable=False)  # NEW: Role column ('user' or 'admin')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Created time
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    # NEW: Role column with default value 'user'
+    # - default='user' means new registrations automatically get 'user' role
+    # - nullable=False means every user MUST have a role
+    role = db.Column(db.String(20), default='user', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def to_dict(self):  # Convert user to dictionary for JSON response
-        return {'id': self.id, 'email': self.email, 'role': self.role, 'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')}
+    def to_dict(self):
+        """Convert user to dictionary, including role for frontend to use."""
+        return {
+            'id': self.id,
+            'email': self.email,
+            'role': self.role,  # Frontend can show/hide features based on role
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        }
 
 
-def hash_password(password):  # Hash password
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+# Hash password - converts plain text to secure hash
+def hash_password(password):
+    return generate_password_hash(password)
 
 
-def check_password(password, hashed_password):  # Verify password
-    return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+# Verify password - compares plain password with stored hash
+def check_password(password, hashed_password):
+    return check_password_hash(hashed_password, password)
 
 
-def create_token(user):  # Create JWT with role included
-    payload = {'user_id': user.id, 'email': user.email, 'role': user.role, 'exp': datetime.utcnow() + timedelta(hours=24)}  # Role is in payload
+# ================================================================================
+# JWT TOKEN WITH ROLE
+# ================================================================================
+# The role is now included in the JWT payload.
+#
+# Why include role in token?
+#   PROS:
+#     - No database query needed to check role on every request
+#     - Faster authorization checks
+#   CONS:
+#     - If role changes, old token still has old role until it expires
+#     - User must re-login to get updated role in token
+#
+# Token payload now looks like:
+#   {
+#       "user_id": 1,
+#       "email": "user@example.com",
+#       "role": "admin",           ← NEW!
+#       "exp": 1234567890
+#   }
+# ================================================================================
+
+
+def create_token(user):
+    """Create JWT token with user role included."""
+    payload = {
+        'user_id': user.id,
+        'email': user.email,
+        'role': user.role,  # Include role in token
+        'exp': datetime.utcnow() + timedelta(hours=24)
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
 
-def token_required(f):  # Decorator to require valid JWT
+def token_required(f):
+    """Decorator to require valid JWT token."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')  # Get auth header
+        auth_header = request.headers.get('Authorization')
 
-        if not auth_header:  # No header
+        if not auth_header:
             return jsonify({'message': 'Token is missing!'}), 401
 
         try:
-            parts = auth_header.split(' ')  # Split "Bearer <token>"
-            if len(parts) != 2 or parts[0] != 'Bearer':  # Invalid format
+            parts = auth_header.split(' ')
+            if len(parts) != 2 or parts[0] != 'Bearer':
                 return jsonify({'message': 'Invalid token format!'}), 401
 
-            token = parts[1]  # Get token
-            decoded = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])  # Decode token
+            token = parts[1]
+            decoded = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
 
-            g.current_user = {'user_id': decoded['user_id'], 'email': decoded['email'], 'role': decoded.get('role', 'user')}  # Store user info including role
+            # Store user info INCLUDING ROLE for @admin_required to use
+            # .get('role', 'user') provides default for old tokens without role
+            g.current_user = {
+                'user_id': decoded['user_id'],
+                'email': decoded['email'],
+                'role': decoded.get('role', 'user')  # Default to 'user' if missing
+            }
 
-        except jwt.ExpiredSignatureError:  # Token expired
+        except jwt.ExpiredSignatureError:
             return jsonify({'message': 'Token has expired!'}), 401
-        except jwt.InvalidTokenError:  # Invalid token
+        except jwt.InvalidTokenError:
             return jsonify({'message': 'Invalid token!'}), 401
 
-        return f(*args, **kwargs)  # Call protected function
+        return f(*args, **kwargs)
     return decorated
 
 
-def admin_required(f):  # Decorator to require admin role - MUST use AFTER @token_required
+# ================================================================================
+# ADMIN REQUIRED DECORATOR
+# ================================================================================
+# This decorator STACKS with @token_required to add role checking.
+#
+# IMPORTANT: Decorator order matters!
+#   @app.route('/admin/users')
+#   @token_required      ← Runs FIRST (outer decorator)
+#   @admin_required      ← Runs SECOND (inner decorator)
+#   def get_all_users():
+#
+# Python decorators execute from bottom to top when applied,
+# but the wrapped functions execute top to bottom.
+#
+# Flow:
+#   1. @token_required checks if user is logged in, stores g.current_user
+#   2. @admin_required checks if g.current_user.role == 'admin'
+#   3. If both pass, the actual route function runs
+#
+# HTTP STATUS CODES - 401 vs 403:
+#   401 Unauthorized: "I don't know who you are" (not logged in, bad token)
+#   403 Forbidden:    "I know who you are, but you can't do this" (no permission)
+# ================================================================================
+
+
+def admin_required(f):
+    """
+    Decorator to require admin role.
+    MUST be used AFTER @token_required (stacked below it).
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
-        if g.current_user.get('role') != 'admin':  # Check if user has admin role
-            return jsonify({'message': 'Admin access required!', 'error': 'FORBIDDEN'}), 403  # 403 = Forbidden (logged in but no permission)
+        if g.current_user.get('role') != 'admin':
+            # 403 Forbidden - user is authenticated but not authorized
+            return jsonify({
+                'message': 'Admin access required!',
+                'error': 'FORBIDDEN'
+            }), 403
 
-        return f(*args, **kwargs)  # Call admin function
+        return f(*args, **kwargs)
     return decorated
 
 
@@ -138,50 +276,106 @@ def get_profile():
     return jsonify({'message': 'Profile retrieved!', 'profile': user.to_dict()})
 
 
-@app.route('/admin/users', methods=['GET'])  # Get all users (ADMIN ONLY)
-@token_required  # First check: valid token
-@admin_required  # Second check: admin role
+# ================================================================================
+# ADMIN-ONLY ROUTES
+# ================================================================================
+# These routes are protected by BOTH @token_required AND @admin_required.
+# Regular users will get 403 Forbidden when trying to access these.
+#
+# URL Convention: /admin/* prefix makes it clear these are admin routes
+# ================================================================================
+
+
+@app.route('/admin/users', methods=['GET'])
+@token_required  # First: Is user logged in?
+@admin_required  # Second: Is user an admin?
 def get_all_users():
-    users = User.query.all()  # Get all users from database
-    return jsonify({'message': 'Users retrieved!', 'users': [user.to_dict() for user in users], 'total': len(users)})
+    """
+    Get all users in the system. ADMIN ONLY.
+
+    Returns list of all users with their roles.
+    Useful for admin dashboard to manage users.
+    """
+    users = User.query.all()
+    return jsonify({
+        'message': 'Users retrieved!',
+        'users': [user.to_dict() for user in users],
+        'total': len(users)
+    })
 
 
-@app.route('/admin/users/<int:user_id>/role', methods=['PUT'])  # Change user role (ADMIN ONLY)
+@app.route('/admin/users/<int:user_id>/role', methods=['PUT'])
 @token_required
 @admin_required
 def update_user_role(user_id):
-    data = request.get_json()  # Get JSON data
-    new_role = data.get('role')  # Get new role
+    """
+    Change a user's role. ADMIN ONLY.
 
-    if new_role not in ['user', 'admin']:  # Validate role value
+    Security considerations:
+        1. Validate role value (only allow known roles)
+        2. Prevent admin from demoting themselves (self-demotion protection)
+        3. In production: prevent role escalation (admin can't create super_admin)
+
+    URL parameter: user_id - The ID of the user to update
+    Request body: { "role": "admin" } or { "role": "user" }
+    """
+    data = request.get_json()
+    new_role = data.get('role')
+
+    # Validate role - only allow known values
+    # This prevents injection of arbitrary roles like "super_admin"
+    if new_role not in ['user', 'admin']:
         return jsonify({'message': 'Invalid role! Must be "user" or "admin"'}), 400
 
-    user = User.query.get(user_id)  # Find user by ID
-    if not user:  # User not found
+    user = User.query.get(user_id)
+    if not user:
         return jsonify({'message': 'User not found!'}), 404
 
-    if user.id == g.current_user['user_id'] and new_role != 'admin':  # Prevent self-demotion
+    # ================================================================================
+    # SELF-DEMOTION PROTECTION
+    # ================================================================================
+    # Prevent admins from accidentally (or intentionally) removing their own admin role.
+    # Why? If the only admin demotes themselves, no one can manage users anymore!
+    #
+    # This check: "Is this admin trying to change their OWN role to non-admin?"
+    # ================================================================================
+    if user.id == g.current_user['user_id'] and new_role != 'admin':
         return jsonify({'message': 'Cannot remove your own admin role!'}), 400
 
-    user.role = new_role  # Update role
-    db.session.commit()  # Save changes
+    user.role = new_role
+    db.session.commit()
 
     return jsonify({'message': f'User role updated to {new_role}!', 'user': user.to_dict()})
 
 
-@app.route('/admin/users/<int:user_id>', methods=['DELETE'])  # Delete user (ADMIN ONLY)
+@app.route('/admin/users/<int:user_id>', methods=['DELETE'])
 @token_required
 @admin_required
 def delete_user(user_id):
-    user = User.query.get(user_id)  # Find user
-    if not user:  # User not found
+    """
+    Delete a user. ADMIN ONLY.
+
+    Security considerations:
+        1. Prevent admin from deleting themselves (self-deletion protection)
+        2. Consider soft-delete instead of hard-delete (mark as inactive)
+        3. In production: log who deleted whom (audit trail)
+    """
+    user = User.query.get(user_id)
+    if not user:
         return jsonify({'message': 'User not found!'}), 404
 
-    if user.id == g.current_user['user_id']:  # Prevent self-deletion
+    # ================================================================================
+    # SELF-DELETION PROTECTION
+    # ================================================================================
+    # Prevent admin from deleting their own account.
+    # If they want to leave, another admin should delete them.
+    # This also prevents accidental "delete all users" bugs from removing the admin.
+    # ================================================================================
+    if user.id == g.current_user['user_id']:
         return jsonify({'message': 'Cannot delete your own account!'}), 400
 
-    db.session.delete(user)  # Delete user
-    db.session.commit()  # Save changes
+    db.session.delete(user)
+    db.session.commit()
 
     return jsonify({'message': 'User deleted successfully!'})
 

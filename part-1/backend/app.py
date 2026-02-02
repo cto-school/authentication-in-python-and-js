@@ -1,17 +1,28 @@
 from flask import Flask, jsonify, request, send_file  # Flask framework
 from flask_cors import CORS  # CORS for cross-origin requests
-import jwt  # JWT library
+import jwt  # This is from 'pyjwt' package (pip install pyjwt), NOT the 'jwt' package
 from datetime import datetime, timedelta, timezone  # For expiration time
 import os  # For file path
 
 app = Flask(__name__)  # Create app
 CORS(app)  # Enable CORS for all routes
 
-SECRET_KEY = "my-super-secret-key-123"  # Secret key for JWT
+# SECRET_KEY: Used to sign and verify tokens. Keep this secret!
+# If someone knows this key, they can create fake tokens.
+SECRET_KEY = "my-super-secret-key-123"
 
 
 @app.route('/')  # Serve the frontend HTML
 def index():
+    # os.path.join: Builds the path to index.html (goes up one folder with '..', then into 'frontend')
+    # send_file: Sends the file as-is (raw HTML) directly to the browser
+    #
+    # Difference from render_template:
+    # - send_file: Sends ANY file (HTML, images, PDFs) exactly as it is, no processing
+    # - render_template: Only for HTML in 'templates/' folder, processes Jinja2 syntax ({{ variable }}, {% for %}, etc.)
+    #
+    # We use send_file here because our HTML is in 'frontend/' folder (not 'templates/')
+    # and we don't need Jinja2 template processing
     html_path = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'index.html')
     return send_file(html_path)
 
@@ -34,6 +45,11 @@ def create_token():
         'exp': datetime.now(timezone.utc) + timedelta(minutes=30)  # Expires in 30 minutes
     }
 
+    # Token: A JWT (JSON Web Token) is a compact, URL-safe string that contains encoded JSON data.
+    # It has 3 parts separated by dots: header.payload.signature
+    # - Header: algorithm info (e.g., HS256)
+    # - Payload: your data (user_id, name, exp, etc.) - Base64 encoded, NOT encrypted (anyone can read it!)
+    # - Signature: ensures the token hasn't been tampered with (created using SECRET_KEY)
     token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')  # Create token
     return jsonify({'message': 'Token created!', 'token': token})
 
@@ -43,8 +59,11 @@ def decode_token():
     data = request.get_json()  # Get data
     token = data.get('token')  # Get token
 
+    # Try printing the raw token to see its structure
     try:
         decoded = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])  # Decode
+        # Also try printing the decorded token 
+        
         return jsonify({'message': 'Decoded!', 'data': decoded})
     except jwt.ExpiredSignatureError:
         return jsonify({'message': 'Token expired!'}), 401
@@ -70,10 +89,10 @@ if __name__ == '__main__':
     print("  JWT Server Running!")
     print("=" * 50)
     print("")
-    print("  Open in browser: http://127.0.0.1:5001")
+    print("  Open in browser: http://127.0.0.1:5000")
     print("")
     print("=" * 50)
-    app.run(debug=True, host='127.0.0.1', port=5001)
+    app.run(debug=True, host='127.0.0.1', port=5000)
 
 
 # ===========================================
@@ -82,7 +101,7 @@ if __name__ == '__main__':
 """
 EXERCISE 1: Change Expiration Time
 ----------------------------------
-Change line 24 to:
+Change 'exp' in '/create-token route (line 45):
     'exp': datetime.utcnow() + timedelta(seconds=10)
 
 Test: Create token, wait 10 seconds, decode it.

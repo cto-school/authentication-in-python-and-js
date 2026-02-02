@@ -14,8 +14,8 @@
 ### Never Store Plain Passwords!
 
 ```
-BAD:  password = "secret123"     (stored as plain text)
-GOOD: password = "$2b$12$xyz..."  (stored as hash)
+BAD:  password = "secret123"                              (stored as plain text - DANGEROUS!)
+GOOD: password = "pbkdf2:sha256:600000$salt$hash..."      (stored as hash - SECURE!)
 ```
 
 ### What is Hashing?
@@ -23,13 +23,20 @@ GOOD: password = "$2b$12$xyz..."  (stored as hash)
 - Hashing converts password into random-looking text
 - Same password always gives same hash
 - You CANNOT reverse a hash to get the password
-- We use **bcrypt** for hashing (it's secure and slow on purpose)
+- We use **werkzeug.security** for hashing (comes built-in with Flask!)
 
 ### Example:
 ```
 Password: "hello"
-Hash:     "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.V"
+Hash:     "pbkdf2:sha256:600000$randomSalt$hashedValue..."
 ```
+
+### Why werkzeug.security?
+
+- **Built into Flask** - No extra installation needed
+- **Simple API** - Just `generate_password_hash()` and `check_password_hash()`
+- **Secure algorithm** - Uses PBKDF2-SHA256 (slow on purpose to prevent brute-force)
+- **Automatic salting** - Each hash is unique even for same password
 
 ---
 
@@ -127,21 +134,25 @@ Open part-2/frontend/index.html in browser
 
 ## Important Concepts
 
-### 1. Password Hashing with bcrypt
+### 1. Password Hashing with werkzeug.security
 
 ```python
-# Hash a password
-hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Hash a password (simple one-liner!)
+hashed = generate_password_hash(password)
 
 # Check if password matches hash
-bcrypt.checkpw(password.encode('utf-8'), hashed)
+check_password_hash(hashed, password)  # Returns True or False
 ```
 
-### 2. Why bcrypt?
+### 2. Why werkzeug.security?
 
-- **Slow on purpose** - Makes brute-force attacks harder
-- **Includes salt** - Same password gives different hash each time
-- **Industry standard** - Used by major companies
+- **No extra install** - Already comes with Flask
+- **Simple API** - No encoding/decoding needed
+- **Slow on purpose** - Uses PBKDF2 with many iterations (prevents brute-force)
+- **Automatic salt** - Same password gives different hash each time
+- **Industry standard** - Used by Flask apps worldwide
 
 ---
 
@@ -152,7 +163,8 @@ Before moving to next part, make sure you can answer:
 1. Why should we never store plain passwords?
 2. What is password hashing?
 3. Can you reverse a hash to get the password?
-4. What does bcrypt do?
+4. What does `generate_password_hash()` do?
+5. Why is werkzeug.security convenient for Flask apps?
 
 ---
 

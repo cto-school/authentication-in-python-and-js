@@ -1,7 +1,12 @@
 from flask import Flask, jsonify, request, send_file  # Flask web framework
 from flask_cors import CORS  # Allow cross-origin requests
 from flask_sqlalchemy import SQLAlchemy  # Database ORM
-import bcrypt  # Password hashing library
+# Password hashing using werkzeug.security (comes built-in with Flask)
+# Why werkzeug instead of bcrypt?
+# - No extra installation needed (already part of Flask)
+# - Simpler API (no manual encoding/decoding of strings)
+# - Uses secure algorithms (pbkdf2:sha256 by default)
+from werkzeug.security import generate_password_hash
 from datetime import datetime  # For timestamps
 import os  # For file paths
 
@@ -36,11 +41,21 @@ class User(db.Model):  # User model - represents 'users' table in database
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Auto-set to current time
 
 
-def hash_password(password):  # Function to hash a plain password
-    password_bytes = password.encode('utf-8')  # Convert string to bytes (bcrypt needs bytes)
-    salt = bcrypt.gensalt()  # Generate random salt (makes each hash unique)
-    hashed = bcrypt.hashpw(password_bytes, salt)  # Create hash from password + salt
-    return hashed.decode('utf-8')  # Convert bytes back to string for database storage
+# ============================================
+# PASSWORD HASHING - Why do we hash passwords?
+# ============================================
+# 1. NEVER store plain text passwords in database
+# 2. If database is hacked, attackers can't see real passwords
+# 3. Hashing is ONE-WAY: you can't reverse a hash to get the password
+# 4. Even if two users have same password, their hashes are different (due to salt)
+#
+# How generate_password_hash() works:
+# - Adds a random "salt" to make each hash unique
+# - Uses PBKDF2-SHA256 algorithm (secure and slow on purpose - prevents brute force)
+# - Returns a string like: "pbkdf2:sha256:600000$salt$hash"
+# ============================================
+def hash_password(password):
+    return generate_password_hash(password)
 
 
 @app.route('/register', methods=['POST'])  # POST endpoint for registration
@@ -151,7 +166,8 @@ def test_hash():
 
 Test: Send same password twice. Are the hashes the same?
 Question: Why are two hashes of the same password different?
-(Hint: Look at the bcrypt.gensalt() function)
+(Hint: werkzeug adds a random "salt" to each hash - look at the hash string,
+you'll see it contains the salt embedded in it: "pbkdf2:sha256:iterations$salt$hash")
 
 
 SELF-STUDY QUESTIONS
@@ -160,7 +176,8 @@ SELF-STUDY QUESTIONS
 
 2. If a hacker gets your database, can they see user passwords?
 
-3. Why do we use bcrypt instead of simple hashing like MD5?
+3. Why do we use werkzeug/PBKDF2 instead of simple hashing like MD5?
+   (Hint: MD5 is fast - that's bad for passwords! PBKDF2 is intentionally slow)
 
 4. What does db.session.commit() do? What happens if you forget it?
 

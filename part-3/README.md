@@ -29,17 +29,27 @@ Remember from Part 2:
 - We CANNOT reverse the hash
 - So how do we check if password is correct?
 
-### bcrypt.checkpw()
+### check_password_hash()
 
 ```python
-# This function:
-# 1. Takes the plain password user entered
-# 2. Hashes it using the same salt from stored hash
-# 3. Compares the two hashes
-# 4. Returns True if they match, False if not
+from werkzeug.security import check_password_hash
 
-bcrypt.checkpw(entered_password, stored_hash)
+# This function:
+# 1. Takes the stored hash and plain password user entered
+# 2. Extracts the salt from the stored hash
+# 3. Hashes entered password with the same salt
+# 4. Compares the two hashes
+# 5. Returns True if they match, False if not
+
+check_password_hash(stored_hash, entered_password)  # Note: hash comes first!
 ```
+
+**Why does this work?**
+The hash string contains the salt embedded in it:
+```
+"pbkdf2:sha256:600000$SALT_HERE$HASH_HERE"
+```
+So `check_password_hash()` can extract the salt and re-hash the entered password.
 
 ---
 
@@ -175,10 +185,11 @@ Open part-3/frontend/index.html in browser
 
 Before moving to next part, make sure you can answer:
 
-1. How does bcrypt.checkpw() verify passwords?
+1. How does `check_password_hash()` verify passwords without decrypting?
 2. What data is stored in the JWT token after login?
 3. Where does the frontend store the token?
 4. Why do we need a token after login?
+5. Why does the hash come first in `check_password_hash(hash, password)`?
 
 ---
 
