@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 4 Solutions: Protected Routes</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 11px; max-height: 150px; overflow: auto; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-4">
+            <h1>Chapter 4: Solutions</h1>
+            <p class="text-muted">Protected routes & Custom decorators</p>
+            <span class="badge bg-success">SOLUTIONS</span>
+        </div>
+
+        <div class="row">
+            <!-- Auth -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">Auth</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="email" placeholder="Email">
+                        <input type="password" class="form-control form-control-sm mb-2" id="password" placeholder="Password">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm flex-fill" onclick="register()">Register</button>
+                            <button class="btn btn-primary btn-sm flex-fill" onclick="login()">Login</button>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="logout()">Logout</button>
+                        <pre id="authResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exercise 1: Settings -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">Ex 1: GET /settings</div>
+                    <div class="card-body">
+                        <button class="btn btn-primary btn-sm w-100" onclick="getSettings()">Get Settings</button>
+                        <pre id="settingsResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exercise 2: Update Profile -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-warning">Ex 2: PUT /profile</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="newEmail" placeholder="New email">
+                        <button class="btn btn-warning btn-sm w-100" onclick="updateProfile()">Update Email</button>
+                        <pre id="updateResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Exercise 4: Welcome (optional auth) -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header bg-success text-white">Ex 4: GET /welcome (optional auth)</div>
+                    <div class="card-body">
+                        <p class="small text-muted">Works with OR without token - different response!</p>
+                        <button class="btn btn-success btn-sm w-100" onclick="getWelcome()">Get Welcome</button>
+                        <pre id="welcomeResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard with logging -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header bg-info text-white">Ex 3: Dashboard (with @log_access)</div>
+                    <div class="card-body">
+                        <p class="small text-muted">Check server console for access logs!</p>
+                        <button class="btn btn-info btn-sm w-100" onclick="getDashboard()">Get Dashboard</button>
+                        <pre id="dashboardResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Token Status -->
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">Token Status</div>
+            <div class="card-body">
+                <div id="tokenStatus" class="small"></div>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <a href="../../frontend/index.html" class="btn btn-outline-secondary">Back to Chapter 4</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5004';
+
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
+        function updateTokenStatus() {
+            const token = getToken();
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    document.getElementById('tokenStatus').innerHTML =
+                        `<span class="text-success">Logged in as ${payload.email}</span>`;
+                } catch {
+                    document.getElementById('tokenStatus').innerHTML =
+                        '<span class="text-danger">Invalid token</span>';
+                }
+            } else {
+                document.getElementById('tokenStatus').innerHTML =
+                    '<span class="text-muted">Not logged in</span>';
+            }
+        }
+
+        async function register() {
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            document.getElementById('authResult').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function login() {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            if (data.token) localStorage.setItem('token', data.token);
+            document.getElementById('authResult').textContent = JSON.stringify(data, null, 2);
+            updateTokenStatus();
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            document.getElementById('authResult').textContent = 'Logged out';
+            updateTokenStatus();
+        }
+
+        async function getSettings() {
+            const token = getToken();
+            const res = await fetch(`${API_URL}/settings`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            document.getElementById('settingsResult').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function updateProfile() {
+            const token = getToken();
+            const res = await fetch(`${API_URL}/profile`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ email: document.getElementById('newEmail').value })
+            });
+            const data = await res.json();
+            if (data.new_token) {
+                localStorage.setItem('token', data.new_token);
+                updateTokenStatus();
+            }
+            document.getElementById('updateResult').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function getWelcome() {
+            const token = getToken();
+            const res = await fetch(`${API_URL}/welcome`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            document.getElementById('welcomeResult').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function getDashboard() {
+            const token = getToken();
+            const res = await fetch(`${API_URL}/dashboard`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            document.getElementById('dashboardResult').textContent = JSON.stringify(data, null, 2);
+        }
+
+        updateTokenStatus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 10: Security Best Practices</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-5">
+            <h1>Chapter 10: Security Best Practices</h1>
+            <p class="text-muted">Production-grade security features</p>
+            <span class="badge bg-danger">TIER 3: Advanced</span>
+            <span class="badge bg-success">FINAL CHAPTER</span>
+        </div>
+
+        <!-- Security Features -->
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">Security Features Demonstrated</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <h3>🛡️</h3>
+                        <strong>Rate Limiting</strong>
+                        <p class="small">10 req/min</p>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <h3>🔐</h3>
+                        <strong>Password Rules</strong>
+                        <p class="small">8+ chars, upper, lower, number</p>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <h3>🔒</h3>
+                        <strong>Account Lockout</strong>
+                        <p class="small">5 failed = 15 min lock</p>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <h3>📋</h3>
+                        <strong>Audit Logging</strong>
+                        <p class="small">Track all actions</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Test Rate Limit -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-warning">Test Rate Limiting</div>
+                    <div class="card-body">
+                        <p class="small">Click rapidly to trigger rate limit:</p>
+                        <button class="btn btn-warning w-100" onclick="testRateLimit()">Send Request</button>
+                        <div id="rateLimitResult" class="mt-2 small"></div>
+                        <p class="small text-muted mt-2">Limit: 10 requests per minute</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Password Rules -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-info text-white">Test Password Rules</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="email" placeholder="Email">
+                        <input type="password" class="form-control form-control-sm mb-2" id="password" placeholder="Password">
+                        <button class="btn btn-info w-100" onclick="register()">Register</button>
+                        <div id="registerResult" class="mt-2 small"></div>
+                        <p class="small text-muted mt-2">Try: "weak" vs "Strong1pass"</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Account Lockout -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">Test Account Lockout</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="loginEmail" placeholder="Email">
+                        <input type="password" class="form-control form-control-sm mb-2" id="loginPassword" placeholder="Password">
+                        <button class="btn btn-danger w-100" onclick="login()">Login</button>
+                        <div id="loginResult" class="mt-2 small"></div>
+                        <p class="small text-muted mt-2">5 wrong passwords = locked</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audit Logs -->
+        <div class="card">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between">
+                <span>Audit Logs</span>
+                <button class="btn btn-sm btn-light" onclick="loadAuditLogs()">Refresh</button>
+            </div>
+            <div class="card-body">
+                <div id="auditLogs" style="max-height: 300px; overflow: auto;">
+                    <p class="text-muted">Click refresh to load logs (must be logged in)</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-success mt-4 text-center">
+            <h4>🎉 Congratulations!</h4>
+            <p>You've completed the Authentication Mastery course!</p>
+            <p class="mb-0">You now have enterprise-grade authentication knowledge.</p>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-9/frontend/index.html" class="btn btn-outline-secondary me-2">← Chapter 9</a>
+            <a href="../../README.md" class="btn btn-success">Course Complete! 🎉</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5010';
+        let token = localStorage.getItem('token');
+        let requestCount = 0;
+
+        async function testRateLimit() {
+            requestCount++;
+            const res = await fetch(`${API_URL}/test-rate-limit`);
+            const data = await res.json();
+            document.getElementById('rateLimitResult').innerHTML = res.status === 429
+                ? `<span class="text-danger">BLOCKED! (Request #${requestCount})</span>`
+                : `<span class="text-success">Allowed (Request #${requestCount})</span>`;
+        }
+
+        async function register() {
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            document.getElementById('registerResult').innerHTML =
+                `<span class="${data.success ? 'text-success' : 'text-danger'}">${data.message}</span>`;
+        }
+
+        async function login() {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('loginEmail').value,
+                    password: document.getElementById('loginPassword').value
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                token = data.token;
+                localStorage.setItem('token', token);
+            }
+
+            let color = data.success ? 'text-success' : 'text-danger';
+            if (data.error === 'ACCOUNT_LOCKED') color = 'text-warning';
+
+            document.getElementById('loginResult').innerHTML = `<span class="${color}">${data.message}</span>`;
+        }
+
+        async function loadAuditLogs() {
+            if (!token) {
+                document.getElementById('auditLogs').innerHTML = '<p class="text-danger">Login first</p>';
+                return;
+            }
+
+            const res = await fetch(`${API_URL}/audit-logs`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                document.getElementById('auditLogs').innerHTML = `
+                    <table class="table table-sm small">
+                        <thead><tr><th>Time</th><th>Action</th><th>Details</th><th>IP</th></tr></thead>
+                        <tbody>
+                            ${data.logs.map(log => `
+                                <tr class="${log.success ? '' : 'table-danger'}">
+                                    <td>${log.timestamp}</td>
+                                    <td>${log.action}</td>
+                                    <td>${log.details || '-'}</td>
+                                    <td>${log.ip}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

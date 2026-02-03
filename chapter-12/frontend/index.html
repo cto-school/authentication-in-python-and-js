@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 12: Google OAuth</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; font-size: 12px; max-height: 200px; overflow: auto; }
+        .google-btn {
+            background-color: #fff;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            color: #3c4043;
+            cursor: pointer;
+            font-family: 'Google Sans', Roboto, Arial, sans-serif;
+            font-size: 14px;
+            height: 40px;
+            padding: 0 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+        .google-btn:hover {
+            background-color: #f8f9fa;
+            border-color: #dadce0;
+        }
+        .google-btn img {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+        }
+        .user-card {
+            display: none;
+        }
+        .user-card.show {
+            display: block;
+        }
+        .profile-pic {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #dadce0;
+        }
+        .divider span {
+            padding: 0 10px;
+            color: #5f6368;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-4">
+            <h1>Chapter 12: Google OAuth</h1>
+            <p class="text-muted">Sign in with Google (OAuth 2.0)</p>
+            <div id="configStatus" class="mt-2"></div>
+        </div>
+
+        <div class="row justify-content-center">
+            <!-- Login/Register Card -->
+            <div class="col-md-5 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <strong>Sign In</strong>
+                    </div>
+                    <div class="card-body">
+                        <!-- Google Sign In Button -->
+                        <button class="google-btn mb-3" onclick="signInWithGoogle()">
+                            <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google">
+                            Sign in with Google
+                        </button>
+
+                        <div class="divider"><span>or</span></div>
+
+                        <!-- Traditional Login -->
+                        <input type="email" class="form-control mb-2" id="loginEmail" placeholder="Email">
+                        <input type="password" class="form-control mb-2" id="loginPassword" placeholder="Password">
+                        <button class="btn btn-primary w-100 mb-2" onclick="login()">Sign In</button>
+
+                        <p class="text-center mb-0">
+                            <small>Don't have an account? <a href="#" onclick="showRegister()">Register</a></small>
+                        </p>
+
+                        <pre id="loginResult" class="mt-3 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Register Card (hidden by default) -->
+            <div class="col-md-5 mb-4" id="registerCard" style="display: none;">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <strong>Register</strong>
+                    </div>
+                    <div class="card-body">
+                        <input type="text" class="form-control mb-2" id="regName" placeholder="Name">
+                        <input type="email" class="form-control mb-2" id="regEmail" placeholder="Email">
+                        <input type="password" class="form-control mb-2" id="regPassword" placeholder="Password (min 8 chars)">
+                        <button class="btn btn-success w-100 mb-2" onclick="register()">Register</button>
+
+                        <p class="text-center mb-0">
+                            <small>Already have an account? <a href="#" onclick="showLogin()">Sign In</a></small>
+                        </p>
+
+                        <pre id="regResult" class="mt-3 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Profile Card (shown when logged in) -->
+            <div class="col-md-5 mb-4 user-card" id="userCard">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <strong>Your Profile</strong>
+                    </div>
+                    <div class="card-body text-center">
+                        <img id="profilePic" class="profile-pic mb-3" src="" alt="Profile">
+                        <h5 id="profileName">-</h5>
+                        <p class="text-muted" id="profileEmail">-</p>
+                        <span class="badge bg-info" id="profileProvider">-</span>
+                        <span class="badge bg-success" id="profileVerified" style="display: none;">Verified</span>
+
+                        <hr>
+
+                        <button class="btn btn-outline-primary w-100 mb-2" onclick="getProfile()">Refresh Profile</button>
+                        <button class="btn btn-outline-danger w-100" onclick="logout()">Sign Out</button>
+
+                        <pre id="profileResult" class="mt-3 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- OAuth Flow Explanation -->
+        <div class="card mt-4">
+            <div class="card-header bg-light">
+                <strong>OAuth 2.0 Flow Explained</strong>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>How "Sign in with Google" Works:</h6>
+                        <ol>
+                            <li>User clicks "Sign in with Google"</li>
+                            <li>Browser redirects to Google's login page</li>
+                            <li>User logs in and approves access</li>
+                            <li>Google redirects back with authorization <code>code</code></li>
+                            <li>Server exchanges code for access token (secret operation)</li>
+                            <li>Server fetches user info from Google</li>
+                            <li>Server creates/finds local user account</li>
+                            <li>Server returns JWT token to frontend</li>
+                        </ol>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Google Cloud Console Setup:</h6>
+                        <ol>
+                            <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                            <li>Create a new project</li>
+                            <li>Go to "APIs & Services" > "Credentials"</li>
+                            <li>Click "Create Credentials" > "OAuth client ID"</li>
+                            <li>Select "Web application"</li>
+                            <li>Add authorized redirect URI:<br>
+                                <code>http://localhost:5012/auth/google/callback</code>
+                            </li>
+                            <li>Copy Client ID and Secret to <code>.env</code></li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-11/frontend/index.html" class="btn btn-outline-secondary">Previous: Chapter 11</a>
+            <a href="../../chapter-13/frontend/index.html" class="btn btn-outline-primary">Next: Chapter 13</a>
+        </div>
+    </div>
+
+    <script>
+        // ================================================================================
+        // API CONFIGURATION
+        // ================================================================================
+        // Full URL (http://localhost:5012) is used for cross-origin requests.
+        // This requires CORS (Cross-Origin Resource Sharing) to be enabled on the backend.
+        // supports_credentials=True is needed because we use sessions for OAuth state.
+        // See backend/app.py where CORS(app, supports_credentials=True) is configured.
+        // ================================================================================
+        const API_URL = 'http://localhost:5012';
+
+        // Check if user is logged in on page load
+        window.onload = function() {
+            checkConfig();
+            checkAuth();
+        };
+
+        // Check configuration status
+        async function checkConfig() {
+            try {
+                const res = await fetch(`${API_URL}/config-status`);
+                const data = await res.json();
+                const statusEl = document.getElementById('configStatus');
+
+                if (data.google_configured) {
+                    statusEl.innerHTML = '<span class="badge bg-success">Google OAuth Configured</span>';
+                } else {
+                    statusEl.innerHTML = '<span class="badge bg-warning">Google OAuth Not Configured</span>';
+                }
+            } catch (e) {
+                document.getElementById('configStatus').innerHTML =
+                    '<span class="badge bg-danger">Server Not Running</span>';
+            }
+        }
+
+        // Check if user is already authenticated
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+
+            if (token && user) {
+                showUserProfile(JSON.parse(user));
+            }
+        }
+
+        // Show user profile card
+        function showUserProfile(user) {
+            document.getElementById('userCard').classList.add('show');
+
+            document.getElementById('profileName').textContent = user.name || 'No name';
+            document.getElementById('profileEmail').textContent = user.email;
+            document.getElementById('profileProvider').textContent = user.auth_provider.toUpperCase();
+
+            if (user.profile_picture) {
+                document.getElementById('profilePic').src = user.profile_picture;
+                document.getElementById('profilePic').style.display = 'block';
+            } else {
+                document.getElementById('profilePic').style.display = 'none';
+            }
+
+            if (user.is_verified) {
+                document.getElementById('profileVerified').style.display = 'inline';
+            }
+        }
+
+        // Google Sign In
+        function signInWithGoogle() {
+            // Redirect to Google OAuth
+            window.location.href = `${API_URL}/auth/google`;
+        }
+
+        // Traditional Login
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await res.json();
+            document.getElementById('loginResult').textContent = JSON.stringify(data, null, 2);
+
+            if (data.token) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                showUserProfile(data.user);
+            }
+        }
+
+        // Register
+        async function register() {
+            const name = document.getElementById('regName').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password })
+            });
+
+            const data = await res.json();
+            document.getElementById('regResult').textContent = JSON.stringify(data, null, 2);
+
+            if (data.token) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                showUserProfile(data.user);
+            }
+        }
+
+        // Get Profile
+        async function getProfile() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                document.getElementById('profileResult').textContent = 'Not logged in';
+                return;
+            }
+
+            const res = await fetch(`${API_URL}/profile`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const data = await res.json();
+            document.getElementById('profileResult').textContent = JSON.stringify(data, null, 2);
+
+            if (data.profile) {
+                localStorage.setItem('user', JSON.stringify(data.profile));
+                showUserProfile(data.profile);
+            }
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            document.getElementById('userCard').classList.remove('show');
+            document.getElementById('profileResult').textContent = '';
+            document.getElementById('loginResult').textContent = 'Logged out';
+        }
+
+        // Toggle Register/Login forms
+        function showRegister() {
+            document.getElementById('registerCard').style.display = 'block';
+        }
+
+        function showLogin() {
+            document.getElementById('registerCard').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

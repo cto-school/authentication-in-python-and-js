@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 5: Error Handling</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-5">
+            <h1>Chapter 5: Error Handling</h1>
+            <p class="text-muted">Standardized errors, validation, and proper HTTP status codes</p>
+            <span class="badge bg-warning text-dark">TIER 2: Production-Ready</span>
+        </div>
+
+        <div class="row">
+            <!-- Error Types Demo -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">Test Error Types</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="small">Click to see different error responses:</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-sm btn-outline-danger" onclick="testError('validation')">Validation (400)</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="testError('auth')">Auth (401)</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="testError('notfound')">Not Found (404)</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="testError('server')">Server (500)</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="testError('exception')">Exception</button>
+                        </div>
+                        <pre id="errorResult" class="mt-3 bg-light p-2 rounded small" style="max-height: 200px; overflow: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validation Demo -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Test Validation</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="small">Try invalid inputs to see validation errors:</p>
+                        <input type="text" class="form-control mb-2" id="testEmail" placeholder="Email (try invalid)">
+                        <input type="password" class="form-control mb-2" id="testPassword" placeholder="Password (try < 6 chars)">
+                        <button class="btn btn-primary w-100" onclick="testRegister()">Test Register</button>
+                        <pre id="validationResult" class="mt-3 bg-light p-2 rounded small" style="max-height: 200px; overflow: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HTTP Status Codes Reference -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">HTTP Status Codes Reference</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Success Codes</h6>
+                        <ul class="small">
+                            <li><strong>200 OK</strong> - Request successful</li>
+                            <li><strong>201 Created</strong> - Resource created</li>
+                        </ul>
+                        <h6>Client Errors</h6>
+                        <ul class="small">
+                            <li><strong>400 Bad Request</strong> - Invalid input</li>
+                            <li><strong>401 Unauthorized</strong> - Not logged in</li>
+                            <li><strong>403 Forbidden</strong> - No permission</li>
+                            <li><strong>404 Not Found</strong> - Resource doesn't exist</li>
+                            <li><strong>409 Conflict</strong> - Already exists</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Server Errors</h6>
+                        <ul class="small">
+                            <li><strong>500 Internal Error</strong> - Server problem</li>
+                        </ul>
+                        <h6>Standardized Response Format</h6>
+                        <pre class="bg-light p-2 rounded small">{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Email is required",
+    "field": "email"
+  }
+}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-4/frontend/index.html" class="btn btn-outline-secondary me-2">← Chapter 4</a>
+            <a href="../../chapter-6/frontend/index.html" class="btn btn-outline-primary">Chapter 6: Email Verification →</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5005';
+
+        async function testError(type) {
+            const resultDiv = document.getElementById('errorResult');
+            try {
+                const res = await fetch(`${API_URL}/test-error/${type}`);
+                const data = await res.json();
+                resultDiv.textContent = `Status: ${res.status}\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (e) {
+                resultDiv.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        async function testRegister() {
+            const email = document.getElementById('testEmail').value;
+            const password = document.getElementById('testPassword').value;
+            const resultDiv = document.getElementById('validationResult');
+
+            try {
+                const res = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                resultDiv.textContent = `Status: ${res.status}\n\n${JSON.stringify(data, null, 2)}`;
+            } catch (e) {
+                resultDiv.textContent = 'Error: ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 9: Role-Based Access Control</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-5">
+            <h1>Chapter 9: Role-Based Access Control</h1>
+            <p class="text-muted">Authentication (who) vs Authorization (what)</p>
+            <span class="badge bg-danger">TIER 3: Advanced</span>
+        </div>
+
+        <!-- Concepts -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">Authentication vs Authorization</div>
+            <div class="card-body">
+                <table class="table table-sm small">
+                    <tr><td><strong>Authentication</strong></td><td>WHO are you?</td><td>Login, tokens</td><td>401 Unauthorized</td></tr>
+                    <tr><td><strong>Authorization</strong></td><td>WHAT can you do?</td><td>Roles, permissions</td><td>403 Forbidden</td></tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Auth & Make Admin -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">1. Login</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="email" placeholder="Email">
+                        <input type="password" class="form-control form-control-sm mb-2" id="password" placeholder="Password">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="register()">Register</button>
+                        <button class="btn btn-sm btn-primary" onclick="login()">Login</button>
+                        <div id="authResult" class="mt-2 small"></div>
+                        <hr>
+                        <p class="small text-muted">Make yourself admin (testing):</p>
+                        <input type="text" class="form-control form-control-sm mb-2" id="adminSecret" placeholder="Secret: make-me-admin-secret">
+                        <button class="btn btn-sm btn-warning w-100" onclick="makeAdmin()">Make Admin</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Status -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-success text-white">2. Current User</div>
+                    <div class="card-body text-center">
+                        <div id="userStatus" class="mb-3">Not logged in</div>
+                        <div id="roleDisplay" class="mb-3">
+                            <span class="badge bg-secondary">No Role</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="getProfile()">GET /profile</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Actions -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">3. Admin Routes</div>
+                    <div class="card-body">
+                        <button class="btn btn-sm btn-outline-danger w-100 mb-2" onclick="getAllUsers()">GET /admin/users</button>
+                        <pre id="adminResult" class="bg-light p-2 rounded small" style="max-height: 200px; overflow: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Table (Admin) -->
+        <div class="card" id="usersCard" style="display: none;">
+            <div class="card-header bg-dark text-white">User Management (Admin Only)</div>
+            <div class="card-body">
+                <table class="table table-sm small">
+                    <thead><tr><th>ID</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+                    <tbody id="usersTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-8/frontend/index.html" class="btn btn-outline-secondary me-2">← Chapter 8</a>
+            <a href="../../chapter-10/frontend/index.html" class="btn btn-outline-primary">Chapter 10: Security →</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5009';
+        let token = localStorage.getItem('token');
+        let currentUser = null;
+
+        function updateUI() {
+            if (currentUser) {
+                document.getElementById('userStatus').textContent = currentUser.email;
+                document.getElementById('roleDisplay').innerHTML = currentUser.role === 'admin'
+                    ? '<span class="badge bg-danger">ADMIN</span>'
+                    : '<span class="badge bg-primary">USER</span>';
+            }
+        }
+
+        async function register() {
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            document.getElementById('authResult').innerHTML =
+                `<span class="${data.success ? 'text-success' : 'text-danger'}">${data.message}</span>`;
+        }
+
+        async function login() {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                token = data.token;
+                currentUser = data.user;
+                localStorage.setItem('token', token);
+            }
+            document.getElementById('authResult').innerHTML =
+                `<span class="${data.success ? 'text-success' : 'text-danger'}">${data.message}</span>`;
+            updateUI();
+        }
+
+        async function makeAdmin() {
+            const res = await fetch(`${API_URL}/make-admin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    secret: document.getElementById('adminSecret').value
+                })
+            });
+            const data = await res.json();
+            alert(data.message);
+            if (data.success) login();  // Re-login to get updated token
+        }
+
+        async function getProfile() {
+            const res = await fetch(`${API_URL}/profile`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            document.getElementById('adminResult').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function getAllUsers() {
+            const res = await fetch(`${API_URL}/admin/users`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            document.getElementById('adminResult').textContent = JSON.stringify(data, null, 2);
+
+            if (data.success) {
+                document.getElementById('usersCard').style.display = 'block';
+                document.getElementById('usersTable').innerHTML = data.users.map(u => `
+                    <tr>
+                        <td>${u.id}</td>
+                        <td>${u.email}</td>
+                        <td><span class="badge ${u.role === 'admin' ? 'bg-danger' : 'bg-primary'}">${u.role}</span></td>
+                        <td>
+                            <button class="btn btn-xs btn-outline-warning" onclick="toggleRole(${u.id}, '${u.role}')">
+                                ${u.role === 'admin' ? 'Demote' : 'Promote'}
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function toggleRole(userId, currentRole) {
+            const newRole = currentRole === 'admin' ? 'user' : 'admin';
+            const res = await fetch(`${API_URL}/admin/users/${userId}/role`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ role: newRole })
+            });
+            const data = await res.json();
+            alert(data.message);
+            getAllUsers();
+        }
+
+        updateUI();
+    </script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email - Production Auth</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card" style="text-align: center;">
+            <div id="loading">
+                <div class="spinner" style="width: 40px; height: 40px; border-width: 3px; border-color: #ddd; border-top-color: #4CAF50; margin: 0 auto 20px;"></div>
+                <p>Verifying your email...</p>
+            </div>
+
+            <div id="result" style="display: none;">
+                <div id="icon" style="font-size: 60px; margin-bottom: 20px;"></div>
+                <h1 id="title"></h1>
+                <p id="message"></p>
+                <a href="/login.html" class="btn btn-primary" style="margin-top: 20px;">Go to Login</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================================================================================
+        // API CONFIGURATION
+        // ================================================================================
+        // Full URL required for cross-origin requests (CORS must be enabled on backend)
+        // ================================================================================
+        const API_URL = 'http://localhost:5013/api';
+
+        // Get token from URL
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+
+        function showResult(success, title, message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('icon').textContent = success ? '✓' : '✗';
+            document.getElementById('icon').style.color = success ? '#4CAF50' : '#dc3545';
+            document.getElementById('title').textContent = title;
+            document.getElementById('message').textContent = message;
+        }
+
+        async function verifyEmail() {
+            if (!token) {
+                showResult(false, 'Invalid Link', 'No verification token provided.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/verify-email`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    showResult(true, 'Email Verified!', 'Your email has been verified. You can now log in.');
+                } else {
+                    showResult(false, 'Verification Failed', data.message || 'This link may be invalid or expired.');
+                }
+            } catch (err) {
+                showResult(false, 'Error', 'Could not connect to server. Please try again.');
+            }
+        }
+
+        verifyEmail();
+    </script>
+</body>
+</html>

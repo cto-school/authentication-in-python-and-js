@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 8 Solutions: Refresh Tokens</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 11px; max-height: 150px; overflow: auto; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-4">
+            <h1>Chapter 8: Solutions</h1>
+            <span class="badge bg-success">SOLUTIONS</span>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">Login</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="email" placeholder="Email">
+                        <input type="password" class="form-control form-control-sm mb-2" id="password" placeholder="Password">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="register()">Register</button>
+                        <button class="btn btn-primary btn-sm" onclick="login()">Login</button>
+                        <pre id="authResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-info text-white">Ex 1: Token Expiry</div>
+                    <div class="card-body">
+                        <button class="btn btn-info btn-sm w-100" onclick="getTokenExpiry()">Check Expiry</button>
+                        <pre id="expiryResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-warning">Ex 4: Refresh (Rotation)</div>
+                    <div class="card-body">
+                        <button class="btn btn-warning btn-sm w-100" onclick="refreshTokens()">Refresh Tokens</button>
+                        <p class="small text-muted mt-1 mb-0">Issues NEW refresh token, revokes old one</p>
+                        <pre id="refreshResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header bg-success text-white">Ex 3: Active Sessions</div>
+                    <div class="card-body">
+                        <button class="btn btn-success btn-sm w-100" onclick="getSessions()">Get Sessions</button>
+                        <pre id="sessionsResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">Ex 2: Logout All</div>
+                    <div class="card-body">
+                        <button class="btn btn-outline-danger btn-sm" onclick="logout()">Logout This</button>
+                        <button class="btn btn-danger btn-sm" onclick="logoutAll()">Logout ALL</button>
+                        <pre id="logoutResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">Token Status</div>
+            <div class="card-body small">
+                <div><strong>Access:</strong> <span id="accessStatus">None</span></div>
+                <div><strong>Refresh:</strong> <span id="refreshStatus">None</span></div>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <a href="../../frontend/index.html" class="btn btn-outline-secondary">Back to Chapter 8</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5008';
+        let accessToken = localStorage.getItem('access_token');
+        let refreshToken = localStorage.getItem('refresh_token');
+
+        function updateStatus() {
+            document.getElementById('accessStatus').textContent = accessToken ? accessToken.substring(0, 30) + '...' : 'None';
+            document.getElementById('refreshStatus').textContent = refreshToken ? refreshToken.substring(0, 30) + '...' : 'None';
+        }
+
+        async function register() {
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+            });
+            document.getElementById('authResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function login() {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+            });
+            const data = await res.json();
+            if (data.access_token) {
+                accessToken = data.access_token;
+                refreshToken = data.refresh_token;
+                localStorage.setItem('access_token', accessToken);
+                localStorage.setItem('refresh_token', refreshToken);
+            }
+            document.getElementById('authResult').textContent = JSON.stringify(data, null, 2);
+            updateStatus();
+        }
+
+        async function getTokenExpiry() {
+            const res = await fetch(`${API_URL}/token-expiry`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            document.getElementById('expiryResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function refreshTokens() {
+            const res = await fetch(`${API_URL}/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken })
+            });
+            const data = await res.json();
+            if (data.access_token) {
+                accessToken = data.access_token;
+                refreshToken = data.refresh_token;
+                localStorage.setItem('access_token', accessToken);
+                localStorage.setItem('refresh_token', refreshToken);
+            }
+            document.getElementById('refreshResult').textContent = JSON.stringify(data, null, 2);
+            updateStatus();
+        }
+
+        async function getSessions() {
+            const res = await fetch(`${API_URL}/sessions`, {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            document.getElementById('sessionsResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function logout() {
+            await fetch(`${API_URL}/logout`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken })
+            });
+            accessToken = null; refreshToken = null;
+            localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token');
+            document.getElementById('logoutResult').textContent = 'Logged out';
+            updateStatus();
+        }
+
+        async function logoutAll() {
+            const res = await fetch(`${API_URL}/logout-all`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            const data = await res.json();
+            accessToken = null; refreshToken = null;
+            localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token');
+            document.getElementById('logoutResult').textContent = JSON.stringify(data, null, 2);
+            updateStatus();
+        }
+
+        updateStatus();
+    </script>
+</body>
+</html>

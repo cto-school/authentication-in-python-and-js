@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(dir /s /b \"C:\\\\Manas Data\\\\Programming\\\\Internship Projects\\\\authentication-in-python-and-js\\\\*.db\")"
+      "Bash(dir /s /b \"C:\\\\Manas Data\\\\Programming\\\\Internship Projects\\\\authentication-in-python-and-js\\\\*.db\")",
+      "Bash(done)"
     ]
   }
 }

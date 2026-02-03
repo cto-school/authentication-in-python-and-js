@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 13: Production Auth</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card" style="max-width: 500px;">
+            <div class="auth-header">
+                <h1>Production Auth System</h1>
+                <p>Chapter 13: Complete Authentication Boilerplate</p>
+            </div>
+
+            <div id="guestView">
+                <a href="/login.html" class="btn btn-primary" style="margin-bottom: 15px;">Sign In</a>
+                <a href="/register.html" class="btn btn-outline">Create Account</a>
+
+                <div class="divider"><span>Features</span></div>
+
+                <ul style="text-align: left; line-height: 1.8; color: #666;">
+                    <li>Email/Password Authentication</li>
+                    <li>Google OAuth (Sign in with Google)</li>
+                    <li>Email Verification</li>
+                    <li>Password Reset</li>
+                    <li>JWT Access & Refresh Tokens</li>
+                    <li>Rate Limiting (flask-limiter)</li>
+                    <li>Account Lockout Protection</li>
+                    <li>Audit Logging</li>
+                </ul>
+            </div>
+
+            <div id="userView" style="display: none;">
+                <div class="message success">
+                    You are logged in as <strong id="userEmail"></strong>
+                </div>
+                <a href="/dashboard.html" class="btn btn-primary" style="margin-bottom: 15px;">Go to Dashboard</a>
+                <button class="btn btn-outline" onclick="logout()">Sign Out</button>
+            </div>
+
+            <div class="auth-footer">
+                <a href="../../chapter-12/frontend/index.html">Previous: Chapter 12</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================================================================================
+        // API CONFIGURATION
+        // ================================================================================
+        // We use the FULL URL (http://localhost:5013/api) instead of just '/api' because:
+        //   1. Makes the code consistent across all chapters
+        //   2. Works whether frontend is served by Flask or opened directly
+        //   3. Requires CORS (Cross-Origin Resource Sharing) to be enabled on the backend
+        //
+        // Note: In production, you would use your actual domain instead of localhost
+        // ================================================================================
+        const API_URL = 'http://localhost:5013/api';
+
+        // Check if logged in
+        function checkAuth() {
+            const token = localStorage.getItem('access_token');
+            const user = localStorage.getItem('user');
+
+            if (token && user) {
+                document.getElementById('guestView').style.display = 'none';
+                document.getElementById('userView').style.display = 'block';
+                document.getElementById('userEmail').textContent = JSON.parse(user).email;
+            }
+        }
+
+        function logout() {
+            const refreshToken = localStorage.getItem('refresh_token');
+            if (refreshToken) {
+                fetch(`${API_URL}/logout`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${refreshToken}` }
+                });
+            }
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user');
+            location.reload();
+        }
+
+        // Check for URL params (errors from OAuth)
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('error')) {
+            alert('Login error: ' + params.get('error'));
+        }
+
+        checkAuth();
+    </script>
+</body>
+</html>

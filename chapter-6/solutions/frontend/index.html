@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 6 Solutions: Email Verification</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 11px; max-height: 150px; overflow: auto; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-4">
+            <h1>Chapter 6: Solutions</h1>
+            <span class="badge bg-success">SOLUTIONS</span>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">Auth</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="email" placeholder="Email">
+                        <input type="password" class="form-control form-control-sm mb-2" id="password" placeholder="Password">
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-outline-secondary btn-sm" onclick="register()">Register</button>
+                            <button class="btn btn-primary btn-sm" onclick="login()">Login</button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="logout()">Logout</button>
+                        </div>
+                        <pre id="authResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-info text-white">Ex 1: Verification Status</div>
+                    <div class="card-body">
+                        <button class="btn btn-info btn-sm w-100" onclick="getVerificationStatus()">Get Status</button>
+                        <pre id="statusResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-warning">Ex 2: Resend (Rate Limited)</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="resendEmail" placeholder="Email">
+                        <button class="btn btn-warning btn-sm w-100" onclick="resendVerification()">Resend</button>
+                        <pre id="resendResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-success text-white">Ex 3: Premium Feature</div>
+                    <div class="card-body">
+                        <button class="btn btn-success btn-sm w-100" onclick="premiumFeature()">Access Premium</button>
+                        <pre id="premiumResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-danger text-white">Ex 4: Admin Verify</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="adminVerifyEmail" placeholder="Email to verify">
+                        <button class="btn btn-danger btn-sm w-100" onclick="adminVerify()">Verify User</button>
+                        <pre id="adminResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">Verify Link</div>
+                    <div class="card-body">
+                        <input type="text" class="form-control form-control-sm mb-2" id="verifyToken" placeholder="Paste verification token">
+                        <button class="btn btn-dark btn-sm w-100" onclick="verifyEmail()">Verify Email</button>
+                        <pre id="verifyResult" class="mt-2 mb-0"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <a href="../../frontend/index.html" class="btn btn-outline-secondary">Back to Chapter 6</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5006';
+        const getToken = () => localStorage.getItem('token');
+        const authHeaders = () => getToken() ? { 'Authorization': `Bearer ${getToken()}` } : {};
+
+        async function register() {
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            document.getElementById('authResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function login() {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            if (data.token) localStorage.setItem('token', data.token);
+            document.getElementById('authResult').textContent = JSON.stringify(data, null, 2);
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            document.getElementById('authResult').textContent = 'Logged out';
+        }
+
+        async function getVerificationStatus() {
+            const res = await fetch(`${API_URL}/verification-status`, { headers: authHeaders() });
+            document.getElementById('statusResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function resendVerification() {
+            const res = await fetch(`${API_URL}/resend-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: document.getElementById('resendEmail').value })
+            });
+            document.getElementById('resendResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function premiumFeature() {
+            const res = await fetch(`${API_URL}/premium-feature`, {
+                method: 'POST',
+                headers: { ...authHeaders(), 'Content-Type': 'application/json' }
+            });
+            document.getElementById('premiumResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function adminVerify() {
+            const res = await fetch(`${API_URL}/admin/verify-user`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: document.getElementById('adminVerifyEmail').value })
+            });
+            document.getElementById('adminResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+
+        async function verifyEmail() {
+            const token = document.getElementById('verifyToken').value;
+            const res = await fetch(`${API_URL}/verify-email?token=${token}`);
+            document.getElementById('verifyResult').textContent = JSON.stringify(await res.json(), null, 2);
+        }
+    </script>
+</body>
+</html>

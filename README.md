@@ -1,6 +1,107 @@
-# Authentication Module - Python (Flask) & JavaScript
+# Authentication Mastery - Python (Flask) & JavaScript
 
-A beginner-friendly, step-by-step guide to learn authentication from scratch.
+A structured, 13-chapter guide to building production-ready authentication systems.
+
+---
+
+## Course Structure
+
+```
+TIER 1: Foundation (Chapters 1-4)
+Build a working authentication system
+
+    Chapter 1: Introduction & Setup
+         |
+         v
+    Chapter 2: User Registration
+         |
+         v
+    Chapter 3: User Login & JWT
+         |
+         v
+    Chapter 4: Protected Routes
+         |
+    [MILESTONE: Working Auth System]
+
+
+TIER 2: Production-Ready (Chapters 5-7)
+Make it ready for real users
+
+    Chapter 5: Error Handling
+         |
+         v
+    Chapter 6: Email Verification
+         |
+         v
+    Chapter 7: Password Management
+         |
+    [MILESTONE: Production-Ready Auth]
+
+
+TIER 3: Advanced (Chapters 8-10)
+Enterprise-grade features
+
+    Chapter 8: Refresh Tokens
+         |
+         v
+    Chapter 9: Role-Based Access Control
+         |
+         v
+    Chapter 10: Security Best Practices
+         |
+    [MILESTONE: Enterprise-Grade Auth]
+
+
+TIER 4: Real-World Integration (Chapters 11-13)
+Production deployment features
+
+    Chapter 11: Email Integration (Mailgun)
+         |
+         v
+    Chapter 12: Google OAuth
+         |
+         v
+    Chapter 13: Production Boilerplate
+         |
+    [MILESTONE: Production-Ready Boilerplate]
+```
+
+---
+
+## Quick Start
+
+```bash
+# Pick any chapter and run:
+cd chapter-X/backend
+pip install -r requirements.txt
+python app.py
+
+# Then open browser to the chapter's port (see table below)
+```
+
+---
+
+## Chapter Overview
+
+| Chapter | Title | Port | Key Concepts |
+|---------|-------|------|--------------|
+| **TIER 1: Foundation** ||||
+| 1 | Introduction & Setup | 5001 | JWT basics, environment setup |
+| 2 | User Registration | 5002 | Password hashing, User model |
+| 3 | User Login & JWT | 5003 | Token creation, verification |
+| 4 | Protected Routes | 5004 | Decorators, `@token_required` |
+| **TIER 2: Production-Ready** ||||
+| 5 | Error Handling | 5005 | Standard responses, validation |
+| 6 | Email Verification | 5006 | Verification tokens, `@verified_required` |
+| 7 | Password Management | 5007 | Change password, forgot/reset |
+| **TIER 3: Advanced** ||||
+| 8 | Refresh Tokens | 5008 | Access/refresh pattern, blacklisting |
+| 9 | Role-Based Access Control | 5009 | Roles, `@admin_required`, 401 vs 403 |
+| 10 | Security Best Practices | 5010 | Rate limiting, lockout, audit logs |
+| **TIER 4: Real-World Integration** ||||
+| 11 | Email Integration | 5011 | Mailgun, HTML templates, real emails |
+| 12 | Google OAuth | 5012 | OAuth 2.0, social login |
+| 13 | Production Boilerplate | 5013 | Complete starter, flask-limiter, modular code |
 
 ---
 
@@ -8,100 +109,35 @@ A beginner-friendly, step-by-step guide to learn authentication from scratch.
 
 Students who have completed:
 - Flask Basics
-- Flask Database
+- Flask Database (SQLAlchemy)
 - JavaScript Basics
-- JavaScript Advanced
 
 ---
 
 ## What You Will Learn
 
-By the end of this module, you will be able to:
-- Understand and use JWT tokens
-- Build Register & Login system
-- Protect API routes
-- Implement Forgot/Reset Password (local + real email)
-- Handle errors properly
-- Add Role-Based Access Control
-- Use Refresh Tokens
-- Verify user emails
-- Allow users to change passwords
+By the end of this course, you will be able to:
 
----
+**Tier 1 - Foundation:**
+- Understand JWT tokens and how they work
+- Hash passwords securely
+- Build Register & Login APIs
+- Protect routes with decorators
 
-## Module Structure
+**Tier 2 - Production-Ready:**
+- Handle errors consistently
+- Implement email verification
+- Build password reset flows
 
-Each part contains:
-```
-part-X/
-├── frontend/      # HTML + JavaScript + Bootstrap
-├── backend/       # Flask API
-└── README.md      # Explanation for that part
-```
+**Tier 3 - Advanced:**
+- Use refresh tokens for better security
+- Implement role-based access control
+- Add rate limiting and audit logging
 
----
-
-## Parts Overview
-
-| Part | Title | What You Learn |
-|------|-------|----------------|
-| **Part 1** | Understanding JWT | What is JWT, why we need it, create & decode tokens |
-| **Part 2** | User Registration | User model, password hashing, `/register` API |
-| **Part 3** | User Login | `/login` API, return JWT token, store in frontend |
-| **Part 4** | Protected Routes | Verify JWT, access protected APIs |
-| **Part 5** | Forgot Password (Local) | Generate reset token, create local reset link |
-| **Part 6** | Reset Password (Local) | Verify token, update password |
-| **Part 7** | Mailgun Integration | Send real emails for password reset |
-| **Part 8** | Error Handling | Proper error responses, frontend error display |
-| **Part 9** | Role-Based Access | Admin vs User roles, protect admin routes |
-| **Part 10** | Refresh Token & Logout | Token refresh, proper logout |
-| **Part 11** | Email Verification | Verify email after registration |
-| **Part 12** | Change Password | Logged-in user changes password |
-
----
-
-## Flow Diagram
-
-```
-PART 1: JWT Basics (Theory)
-    │
-    ▼
-PART 2: Register ──► PART 3: Login ──► PART 4: Protected Routes
-                                              │
-                                              ▼
-                         PART 5: Forgot Password (Local)
-                                              │
-                                              ▼
-                         PART 6: Reset Password (Local)
-                                              │
-                                              ▼
-                         PART 7: Mailgun (Real Email)
-                                              │
-                                              ▼
-                         PART 8: Error Handling
-                                              │
-                                              ▼
-                         PART 9: Role-Based Access
-                                              │
-                                              ▼
-                         PART 10: Refresh Token & Logout
-                                              │
-                                              ▼
-                         PART 11: Email Verification
-                                              │
-                                              ▼
-                         PART 12: Change Password
-```
-
----
-
-## How to Use This Module
-
-1. **Start from Part 1** - Don't skip parts
-2. **Read the README** of each part first
-3. **Type the code yourself** - Don't copy-paste
-4. **Run and test** each part before moving forward
-5. **Understand inline comments** - They explain the code
+**Tier 4 - Real-World Integration:**
+- Send real emails with Mailgun
+- Implement Google OAuth (Sign in with Google)
+- Build a production-ready boilerplate you can use
 
 ---
 
@@ -109,49 +145,67 @@ PART 2: Register ──► PART 3: Login ──► PART 4: Protected Routes
 
 | Layer | Technology |
 |-------|------------|
-| Backend | Python, Flask, SQLite |
+| Backend | Python 3.8+, Flask, SQLAlchemy |
+| Database | SQLite |
 | Frontend | HTML, JavaScript, Bootstrap 5 |
-| Authentication | JWT (JSON Web Tokens) |
-| Email | Mailgun (for real emails) |
+| Authentication | JWT (pyjwt library) |
+| Password Security | werkzeug.security |
+
+---
+
+## Project Structure
+
+Each chapter follows a consistent structure:
+
+```
+chapter-X/
+├── backend/
+│   ├── app.py           # Flask application
+│   └── requirements.txt # Dependencies
+├── frontend/
+│   └── index.html       # Test interface
+└── README.md            # Chapter explanation
+```
+
+---
+
+## Key Concepts Covered
+
+| Concept | Chapter | Description |
+|---------|---------|-------------|
+| Password Hashing | 2 | Never store plain passwords |
+| JWT Tokens | 3 | Stateless authentication |
+| Decorators | 4 | `@token_required` pattern |
+| HTTP Status Codes | 5 | 400, 401, 403, 404, 409, 500 |
+| Email Verification | 6 | Verify user owns email |
+| Token Expiry | 7, 8 | Short-lived tokens |
+| Refresh Tokens | 8 | Renew access without login |
+| RBAC | 9 | Role-based permissions |
+| Rate Limiting | 10, 13 | Prevent brute force |
+| Account Lockout | 10, 13 | Lock after failed attempts |
+| Audit Logging | 10, 13 | Track security events |
+| Real Email | 11, 13 | Mailgun integration |
+| OAuth 2.0 | 12, 13 | Google Sign-In |
+| flask-limiter | 13 | Production rate limiting |
+
+---
+
+## How to Use This Course
+
+1. **Start from Chapter 1** - Each chapter builds on previous ones
+2. **Read the README first** - Understand the concept before coding
+3. **Type the code yourself** - Don't just copy-paste
+4. **Test with the frontend** - Each chapter has a test interface
+5. **Read the comments** - They explain WHY, not just WHAT
 
 ---
 
 ## Prerequisites
 
-Make sure you have installed:
 - Python 3.8+
 - pip (Python package manager)
-- Any code editor (VS Code recommended)
+- Code editor (VS Code recommended)
 - Web browser (Chrome recommended)
-
----
-
-## Quick Start for Each Part
-
-### Backend Setup
-```bash
-cd part-X/backend
-pip install -r requirements.txt
-python app.py
-```
-
-### Open in Browser
-Each part runs on its own port:
-
-| Part | URL |
-|------|-----|
-| Part 1 | http://localhost:5001 |
-| Part 2 | http://localhost:5002 |
-| Part 3 | http://localhost:5003 |
-| Part 4 | http://localhost:5004 |
-| Part 5 | http://localhost:5005 |
-| Part 6 | http://localhost:5006 |
-| Part 7 | http://localhost:5007 |
-| Part 8 | http://localhost:5008 |
-| Part 9 | http://localhost:5009 |
-| Part 10 | http://localhost:5010 |
-| Part 11 | http://localhost:5011 |
-| Part 12 | http://localhost:5012 |
 
 ---
 
@@ -161,16 +215,31 @@ Each part runs on its own port:
 |-------|----------|
 | Module not found | Run `pip install -r requirements.txt` |
 | Port already in use | Change port in `app.py` or kill the process |
-| CORS error | Make sure Flask-CORS is installed and configured |
+| CORS error | Make sure Flask-CORS is installed |
 | Token expired | Login again to get new token |
-| Password reset email not received | **Check Spam/Junk folder!** Emails from sandbox domains often go to spam |
-| "Not Found" error | Make sure you're using the correct port (see table above) |
+| Database locked | Close other connections, restart server |
+
+---
+
+## FAQ
+
+**Q: Can I skip Tier 1 if I know the basics?**
+A: Each tier is designed to be self-contained, but concepts build on each other. At minimum, skim the READMEs.
+
+**Q: Do I need to set up email for Chapter 6-7?**
+A: No! The chapters simulate email by printing to console. Real email integration is optional.
+
+**Q: Which tier should I complete?**
+A: Tier 1 for learning projects, Tier 2 for real applications, Tier 3-4 for production systems.
+
+**Q: Can I use Chapter 13 as a starter for my project?**
+A: Yes! Chapter 13 is designed as a production-ready boilerplate. Copy it and customize for your needs.
 
 ---
 
 ## Let's Begin!
 
-Start with [Part 1: Understanding JWT](./part-1/README.md)
+Start with [Chapter 1: Introduction & Setup](./chapter-1/README.md)
 
 ---
 

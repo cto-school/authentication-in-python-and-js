@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 1: Introduction & Setup</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .token-box {
+            word-break: break-all;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .token-part { margin: 5px 0; padding: 8px; border-radius: 4px; }
+        .token-header { background: #ffcccb; }
+        .token-payload { background: #90EE90; }
+        .token-signature { background: #87CEEB; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-5">
+            <h1>Chapter 1: Introduction & Setup</h1>
+            <p class="text-muted">Verify your setup and see JWT tokens in action</p>
+            <span class="badge bg-primary">TIER 1: Foundation</span>
+        </div>
+
+        <!-- Health Check -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">1. Health Check</h5>
+            </div>
+            <div class="card-body">
+                <p>Click to verify the server is running:</p>
+                <button class="btn btn-success" onclick="checkHealth()">Check Server Health</button>
+                <div id="healthResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- JWT Demo -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">2. JWT Token Demo</h5>
+            </div>
+            <div class="card-body">
+                <p>Click to see how a JWT token is created:</p>
+                <button class="btn btn-primary" onclick="getDemoToken()">Generate Demo Token</button>
+                <div id="tokenResult" class="mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Concepts Review -->
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">3. Key Concepts</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Authentication vs Authorization</h6>
+                        <ul>
+                            <li><strong>Authentication:</strong> "Who are you?"</li>
+                            <li><strong>Authorization:</strong> "What can you do?"</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>JWT Structure</h6>
+                        <div class="token-part token-header">Header (algorithm)</div>
+                        <div class="token-part token-payload">Payload (your data)</div>
+                        <div class="token-part token-signature">Signature (verification)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-2/frontend/index.html" class="btn btn-outline-primary">
+                Next: Chapter 2 - User Registration →
+            </a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5001';
+
+        async function checkHealth() {
+            const resultDiv = document.getElementById('healthResult');
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <strong>Status:</strong> ${data.status}<br>
+                        <strong>Message:</strong> ${data.message}
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> Cannot connect to server.<br>
+                        Make sure the backend is running: <code>python app.py</code>
+                    </div>
+                `;
+            }
+        }
+
+        async function getDemoToken() {
+            const resultDiv = document.getElementById('tokenResult');
+            try {
+                const response = await fetch(`${API_URL}/demo-token`);
+                const data = await response.json();
+ 
+                console.log('received dataaaaa: ', data);  // check this in cosole logs
+                // Split token to show parts
+                const parts = data.token.split('.');
+                console.log('partsssss: ', parts);  // check this in cosole logs
+
+                resultDiv.innerHTML = `
+                    <div class="alert alert-info">
+                        <strong>Token Generated!</strong>
+                    </div>
+
+                    <h6>Full Token:</h6>
+                    <div class="token-box mb-3">${data.token}</div>
+
+                    <h6>Token Parts:</h6>
+                    <div class="token-part token-header"><strong>Header:</strong> ${parts[0]}</div>
+                    <div class="token-part token-payload"><strong>Payload:</strong> ${parts[1]}</div>
+                    <div class="token-part token-signature"><strong>Signature:</strong> ${parts[2]}</div>
+
+                    <h6 class="mt-3">Decoded Payload:</h6>
+                    <pre class="bg-light p-3 rounded">${JSON.stringify(data.decoded_payload, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

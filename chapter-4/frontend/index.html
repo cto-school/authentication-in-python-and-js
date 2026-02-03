@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 4: Protected Routes</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-5">
+            <h1>Chapter 4: Protected Routes</h1>
+            <p class="text-muted">Use JWT tokens to access protected endpoints</p>
+            <span class="badge bg-primary">TIER 1: Foundation</span>
+            <span class="badge bg-success">MILESTONE: Working Auth!</span>
+        </div>
+
+        <div class="row">
+            <!-- Auth Section -->
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="mb-0">1. Register/Login</h6>
+                    </div>
+                    <div class="card-body">
+                        <input type="email" class="form-control mb-2" id="email" placeholder="Email">
+                        <input type="password" class="form-control mb-2" id="password" placeholder="Password">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary flex-fill" onclick="register()">Register</button>
+                            <button class="btn btn-primary flex-fill" onclick="login()">Login</button>
+                        </div>
+                        <div id="authResult" class="mt-2"></div>
+                    </div>
+                </div>
+
+                <!-- Token Status -->
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0">Token Status</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="tokenStatus">Checking...</div>
+                        <button class="btn btn-sm btn-outline-danger mt-2" onclick="logout()">Clear Token</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Protected Routes -->
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0">2. Test Protected Routes</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>These routes require a valid JWT token. Try them with and without logging in!</p>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">GET /profile</div>
+                                    <div class="card-body">
+                                        <button class="btn btn-primary btn-sm" onclick="getProfile()">Test Profile</button>
+                                        <pre id="profileResult" class="mt-2 bg-light p-2 rounded small"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header">GET /dashboard</div>
+                                    <div class="card-body">
+                                        <button class="btn btn-primary btn-sm" onclick="getDashboard()">Test Dashboard</button>
+                                        <pre id="dashboardResult" class="mt-2 bg-light p-2 rounded small"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- How it works -->
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <h6 class="mb-0">How Protected Routes Work</h6>
+                    </div>
+                    <div class="card-body">
+                        <pre class="bg-light p-3 rounded small mb-0">
+// Frontend sends token in Authorization header
+fetch('/profile', {
+    headers: {
+        'Authorization': 'Bearer eyJhbG...'  // ← Your JWT token
+    }
+});
+
+// Backend @token_required decorator:
+// 1. Extracts token from header
+// 2. Verifies signature with SECRET_KEY
+// 3. Checks if token expired
+// 4. Stores user info in g.current_user
+// 5. Calls the actual route function</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-3/frontend/index.html" class="btn btn-outline-secondary me-2">← Chapter 3</a>
+            <a href="../../chapter-5/frontend/index.html" class="btn btn-outline-primary">Chapter 5: Error Handling →</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5004';
+
+        function updateTokenStatus() {
+            const token = localStorage.getItem('token');
+            const statusDiv = document.getElementById('tokenStatus');
+
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const expiry = new Date(payload.exp * 1000);
+                    const isExpired = expiry < new Date();
+
+                    statusDiv.innerHTML = isExpired
+                        ? `<span class="text-danger">Token expired</span>`
+                        : `<span class="text-success">Logged in as ${payload.email}</span><br><small>Expires: ${expiry.toLocaleString()}</small>`;
+                } catch (e) {
+                    statusDiv.innerHTML = '<span class="text-danger">Invalid token</span>';
+                }
+            } else {
+                statusDiv.innerHTML = '<span class="text-muted">No token (not logged in)</span>';
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                document.getElementById('authResult').innerHTML =
+                    `<small class="${res.ok ? 'text-success' : 'text-danger'}">${data.message}</small>`;
+            } catch (e) {
+                document.getElementById('authResult').innerHTML = '<small class="text-danger">Error</small>';
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    localStorage.setItem('token', data.token);
+                    document.getElementById('authResult').innerHTML = '<small class="text-success">Logged in!</small>';
+                } else {
+                    document.getElementById('authResult').innerHTML = `<small class="text-danger">${data.message}</small>`;
+                }
+                updateTokenStatus();
+            } catch (e) {
+                document.getElementById('authResult').innerHTML = '<small class="text-danger">Error</small>';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            updateTokenStatus();
+            document.getElementById('authResult').innerHTML = '<small class="text-muted">Logged out</small>';
+        }
+
+        async function getProfile() {
+            const token = localStorage.getItem('token');
+            const resultDiv = document.getElementById('profileResult');
+
+            try {
+                const res = await fetch(`${API_URL}/profile`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+                const data = await res.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.className = `mt-2 p-2 rounded small ${res.ok ? 'bg-light' : 'bg-danger text-white'}`;
+            } catch (e) {
+                resultDiv.textContent = 'Error connecting';
+            }
+        }
+
+        async function getDashboard() {
+            const token = localStorage.getItem('token');
+            const resultDiv = document.getElementById('dashboardResult');
+
+            try {
+                const res = await fetch(`${API_URL}/dashboard`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+                const data = await res.json();
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.className = `mt-2 p-2 rounded small ${res.ok ? 'bg-light' : 'bg-danger text-white'}`;
+            } catch (e) {
+                resultDiv.textContent = 'Error connecting';
+            }
+        }
+
+        updateTokenStatus();
+    </script>
+</body>
+</html>

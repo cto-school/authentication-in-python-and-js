@@ -1,0 +1,25 @@
+# Chapter 13: Production Authentication
+# =====================================
+
+# Core Flask
+flask
+flask-cors
+flask-sqlalchemy
+
+# Authentication
+pyjwt
+
+# Rate Limiting (production-grade)
+flask-limiter
+
+# Environment Variables
+python-dotenv
+
+# HTTP Requests (for Mailgun & Google OAuth)
+requests
+
+# Optional: Redis for production rate limiting
+# redis
+
+# Optional: PostgreSQL for production database
+# psycopg2-binary

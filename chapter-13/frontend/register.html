@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account - Production Auth</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Create Account</h1>
+                <p>Join us today! It only takes a minute.</p>
+            </div>
+
+            <div id="message" class="message" style="display: none;"></div>
+
+            <!-- Google Sign In -->
+            <button class="btn btn-google" onclick="signInWithGoogle()">
+                <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google">
+                Sign up with Google
+            </button>
+
+            <div class="divider"><span>or register with email</span></div>
+
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" class="form-control" placeholder="Enter your name">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" class="form-control" placeholder="Enter your email" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="password" class="form-control" placeholder="Create a password (min 8 chars)" required minlength="8">
+                        <button type="button" class="password-toggle" onclick="togglePassword()">Show</button>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="submitBtn">Create Account</button>
+            </form>
+
+            <div class="auth-footer">
+                Already have an account? <a href="/login.html">Sign in</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================================================================================
+        // API CONFIGURATION
+        // ================================================================================
+        // Full URL required for cross-origin requests (CORS must be enabled on backend)
+        // This allows the frontend to be served from any origin while calling our API
+        // ================================================================================
+        const API_URL = 'http://localhost:5013/api';
+
+        if (localStorage.getItem('access_token')) {
+            window.location.href = '/dashboard.html';
+        }
+
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.innerHTML = text;
+            msg.className = `message ${type}`;
+            msg.style.display = 'block';
+        }
+
+        function togglePassword() {
+            const pwd = document.getElementById('password');
+            const btn = event.target;
+            pwd.type = pwd.type === 'password' ? 'text' : 'password';
+            btn.textContent = pwd.type === 'password' ? 'Show' : 'Hide';
+        }
+
+        function signInWithGoogle() {
+            window.location.href = `${API_URL}/auth/google`;
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Creating account...';
+
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    let msg = 'Account created! Please check your email to verify your account.';
+                    if (data.verification_link) {
+                        msg += `<br><br><small>Dev mode: <a href="${data.verification_link}" target="_blank">Click here to verify</a></small>`;
+                    }
+                    showMessage(msg, 'success');
+                    document.getElementById('registerForm').reset();
+                } else {
+                    showMessage(data.message, 'error');
+                }
+            } catch (err) {
+                showMessage('Connection error. Please try again.', 'error');
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Create Account';
+        }
+    </script>
+</body>
+</html>

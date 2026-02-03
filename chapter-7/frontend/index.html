@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 7: Password Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-5">
+            <h1>Chapter 7: Password Management</h1>
+            <p class="text-muted">Change Password & Forgot Password flows</p>
+            <span class="badge bg-warning text-dark">TIER 2: Production-Ready</span>
+            <span class="badge bg-success">MILESTONE: Production Ready!</span>
+        </div>
+
+        <div class="row">
+            <!-- Auth -->
+            <div class="col-md-3 mb-4">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">Login</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control form-control-sm mb-2" id="email" placeholder="Email">
+                        <input type="password" class="form-control form-control-sm mb-2" id="password" placeholder="Password">
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="register()">Register</button>
+                            <button class="btn btn-sm btn-primary" onclick="login()">Login</button>
+                        </div>
+                        <div id="authResult" class="mt-2 small"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section A: Change Password -->
+            <div class="col-md-4 mb-4">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h6 class="mb-0">A: Change Password</h6>
+                        <small>(User is logged in)</small>
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-muted">Requires current password verification</p>
+                        <input type="password" class="form-control form-control-sm mb-2" id="currentPassword" placeholder="Current Password">
+                        <input type="password" class="form-control form-control-sm mb-2" id="newPassword" placeholder="New Password">
+                        <button class="btn btn-primary w-100" onclick="changePassword()">Change Password</button>
+                        <div id="changeResult" class="mt-2 small"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section B: Forgot Password -->
+            <div class="col-md-5 mb-4">
+                <div class="card border-warning">
+                    <div class="card-header bg-warning">
+                        <h6 class="mb-0">B: Forgot Password</h6>
+                        <small>(User is NOT logged in)</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <p class="small text-muted mb-1">Step 1: Request reset link</p>
+                            <div class="input-group input-group-sm">
+                                <input type="email" class="form-control" id="forgotEmail" placeholder="Email">
+                                <button class="btn btn-warning" onclick="forgotPassword()">Send</button>
+                            </div>
+                            <div id="forgotResult" class="mt-1 small"></div>
+                        </div>
+
+                        <hr>
+
+                        <div>
+                            <p class="small text-muted mb-1">Step 2: Reset password with token</p>
+                            <input type="text" class="form-control form-control-sm mb-2" id="resetToken" placeholder="Reset Token">
+                            <input type="password" class="form-control form-control-sm mb-2" id="resetPassword" placeholder="New Password">
+                            <button class="btn btn-success btn-sm w-100" onclick="resetPassword()">Reset Password</button>
+                            <div id="resetResult" class="mt-1 small"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">Change Password vs Forgot Password</h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm small">
+                    <thead><tr><th>Aspect</th><th>Change Password</th><th>Forgot Password</th></tr></thead>
+                    <tbody>
+                        <tr><td>User state</td><td>Logged in</td><td>NOT logged in</td></tr>
+                        <tr><td>Knows password?</td><td>Yes (current)</td><td>No (forgot)</td></tr>
+                        <tr><td>Verification</td><td>Current password</td><td>Email token</td></tr>
+                        <tr><td>Requires token</td><td>JWT (logged in)</td><td>Reset token from email</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-6/frontend/index.html" class="btn btn-outline-secondary me-2">← Chapter 6</a>
+            <a href="../../chapter-8/frontend/index.html" class="btn btn-outline-primary">Chapter 8: Refresh Tokens →</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5007';
+        let token = localStorage.getItem('token');
+
+        async function register() {
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            document.getElementById('authResult').innerHTML =
+                `<span class="${data.success ? 'text-success' : 'text-danger'}">${data.message}</span>`;
+        }
+
+        async function login() {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                token = data.token;
+                localStorage.setItem('token', token);
+            }
+            document.getElementById('authResult').innerHTML =
+                `<span class="${data.success ? 'text-success' : 'text-danger'}">${data.message}</span>`;
+        }
+
+        async function changePassword() {
+            const res = await fetch(`${API_URL}/change-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    current_password: document.getElementById('currentPassword').value,
+                    new_password: document.getElementById('newPassword').value
+                })
+            });
+            const data = await res.json();
+            document.getElementById('changeResult').innerHTML =
+                `<span class="${data.success ? 'text-success' : 'text-danger'}">${data.message}</span>`;
+        }
+
+        async function forgotPassword() {
+            const res = await fetch(`${API_URL}/forgot-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: document.getElementById('forgotEmail').value })
+            });
+            const data = await res.json();
+            let html = `<span class="text-info">${data.message}</span>`;
+            if (data.reset_link) {
+                const resetToken = data.reset_link.split('token=')[1];
+                html += `<br><code class="small">${resetToken}</code>`;
+            }
+            document.getElementById('forgotResult').innerHTML = html;
+        }
+
+        async function resetPassword() {
+            const res = await fetch(`${API_URL}/reset-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    token: document.getElementById('resetToken').value,
+                    new_password: document.getElementById('resetPassword').value
+                })
+            });
+            const data = await res.json();
+            document.getElementById('resetResult').innerHTML =
+                `<span class="${data.success ? 'text-success' : 'text-danger'}">${data.message}</span>`;
+        }
+    </script>
+</body>
+</html>

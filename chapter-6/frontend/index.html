@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 6: Email Verification</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="text-center mb-5">
+            <h1>Chapter 6: Email Verification</h1>
+            <p class="text-muted">Ensure users own their email addresses</p>
+            <span class="badge bg-warning text-dark">TIER 2: Production-Ready</span>
+        </div>
+
+        <!-- Verification Flow -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Verification Flow</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col">
+                        <div class="badge bg-secondary p-3 mb-2">1</div>
+                        <p class="small">Register</p>
+                    </div>
+                    <div class="col">→</div>
+                    <div class="col">
+                        <div class="badge bg-secondary p-3 mb-2">2</div>
+                        <p class="small">Get Link</p>
+                    </div>
+                    <div class="col">→</div>
+                    <div class="col">
+                        <div class="badge bg-secondary p-3 mb-2">3</div>
+                        <p class="small">Verify</p>
+                    </div>
+                    <div class="col">→</div>
+                    <div class="col">
+                        <div class="badge bg-success p-3 mb-2">4</div>
+                        <p class="small">Full Access</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Register -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">1. Register</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control mb-2" id="regEmail" placeholder="Email">
+                        <input type="password" class="form-control mb-2" id="regPassword" placeholder="Password">
+                        <button class="btn btn-primary w-100" onclick="register()">Register</button>
+                        <div id="regResult" class="mt-2 small"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verify -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">2. Verify Email</div>
+                    <div class="card-body">
+                        <p class="small text-muted">Paste the verification token:</p>
+                        <input type="text" class="form-control mb-2" id="verifyToken" placeholder="Verification token">
+                        <button class="btn btn-success w-100" onclick="verifyEmail()">Verify</button>
+                        <div id="verifyResult" class="mt-2 small"></div>
+                        <hr>
+                        <p class="small text-muted">Or resend verification:</p>
+                        <input type="email" class="form-control mb-2" id="resendEmail" placeholder="Email">
+                        <button class="btn btn-outline-secondary btn-sm w-100" onclick="resend()">Resend</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login & Test -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">3. Login & Test</div>
+                    <div class="card-body">
+                        <input type="email" class="form-control mb-2" id="loginEmail" placeholder="Email">
+                        <input type="password" class="form-control mb-2" id="loginPassword" placeholder="Password">
+                        <button class="btn btn-primary w-100 mb-2" onclick="login()">Login</button>
+                        <div id="loginResult" class="mb-2 small"></div>
+                        <hr>
+                        <button class="btn btn-outline-primary btn-sm w-100 mb-1" onclick="getProfile()">GET /profile (verified only)</button>
+                        <button class="btn btn-outline-secondary btn-sm w-100" onclick="getBasicProfile()">GET /profile-basic (any user)</button>
+                        <pre id="testResult" class="mt-2 bg-light p-2 rounded small" style="max-height: 150px; overflow: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4">
+            <a href="../../chapter-5/frontend/index.html" class="btn btn-outline-secondary me-2">← Chapter 5</a>
+            <a href="../../chapter-7/frontend/index.html" class="btn btn-outline-primary">Chapter 7: Password Management →</a>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5006';
+        let currentToken = localStorage.getItem('token');
+
+        async function register() {
+            const res = await fetch(`${API_URL}/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('regEmail').value,
+                    password: document.getElementById('regPassword').value
+                })
+            });
+            const data = await res.json();
+            let html = data.success
+                ? `<div class="text-success">${data.message}</div>`
+                : `<div class="text-danger">${data.message}</div>`;
+
+            if (data.verification_link) {
+                const token = data.verification_link.split('token=')[1];
+                html += `<div class="mt-2"><strong>Token:</strong><br><code class="small">${token}</code></div>`;
+            }
+            document.getElementById('regResult').innerHTML = html;
+        }
+
+        async function verifyEmail() {
+            const token = document.getElementById('verifyToken').value;
+            const res = await fetch(`${API_URL}/verify-email?token=${token}`);
+            const data = await res.json();
+            document.getElementById('verifyResult').innerHTML = data.success
+                ? `<div class="text-success">${data.message}</div>`
+                : `<div class="text-danger">${data.message}</div>`;
+        }
+
+        async function resend() {
+            const res = await fetch(`${API_URL}/resend-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: document.getElementById('resendEmail').value })
+            });
+            const data = await res.json();
+            let html = `<div class="text-info">${data.message}</div>`;
+            if (data.verification_link) {
+                const token = data.verification_link.split('token=')[1];
+                html += `<div class="mt-1"><code class="small">${token}</code></div>`;
+            }
+            document.getElementById('verifyResult').innerHTML = html;
+        }
+
+        async function login() {
+            const res = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('loginEmail').value,
+                    password: document.getElementById('loginPassword').value
+                })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                currentToken = data.token;
+                localStorage.setItem('token', currentToken);
+                let html = `<div class="text-success">Logged in! Verified: ${data.user.is_verified}</div>`;
+                if (data.warning) {
+                    html += `<div class="text-warning small">${data.warning}</div>`;
+                }
+                document.getElementById('loginResult').innerHTML = html;
+            } else {
+                document.getElementById('loginResult').innerHTML = `<div class="text-danger">${data.message}</div>`;
+            }
+        }
+
+        async function getProfile() {
+            await testEndpoint('/profile');
+        }
+
+        async function getBasicProfile() {
+            await testEndpoint('/profile-basic');
+        }
+
+        async function testEndpoint(endpoint) {
+            const res = await fetch(`${API_URL}${endpoint}`, {
+                headers: currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}
+            });
+            const data = await res.json();
+            document.getElementById('testResult').textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>
